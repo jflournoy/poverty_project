@@ -2,7 +2,7 @@
 title: "Stratified Regression Simulations"
 author: "John Flournoy and Rita Ludwig"
 date: "4/12/2017"
-output: html_document
+output: md_document
 ---
 
 ```{r setup, include=FALSE}
