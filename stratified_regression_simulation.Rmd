@@ -1,0 +1,101 @@
+---
+title: "Stratified Regression Simulations"
+author: "John Flournoy and Rita Ludwig"
+date: "4/12/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+We might find [this](http://tophcito.blogspot.com/2014/04/survey-computing-your-own-post.html) helpful.
+
+```{r}
+if(!require(survey)){
+  install.packages('survey')
+} 
+library(survey)
+
+?postStratify(design, strata, population, partial = FALSE)
+?svydesign()
+?rake()
+```
+
+# Simulate some data
+
+We want to create a set of correlated predictors, and then to compute our outcome variable from those predictors to create a realistic scenario. The model we will eventually be estimating is:
+
+$$
+\text{DELAYDISCOUNT} = \beta_0 + \beta_1\text{ITNR} + \beta_2\text{EDUC}+\beta_3\text{C}+\beta_4\text{IMPULS}+\beta_5\text{PLANFUL}+\epsilon.
+$$
+
+We assume that these are all correlated to some degree. I'll start with some pretty unconstrained assumptions. I'm wrapping this in a function so that we can use it later to make slightly different data for different strata.
+
+```{r}
+generate_data <- function(gen_info){
+  require(MASS)
+  N <- gen_info$N
+  params <- gen_info$params
+  nvars <- length(params[-1])
+  cormat <- diag(nvars)
+  cormat[lower.tri(cormat)] <- runif(nvars, .1, .3)
+  
+  X <- cbind(rep(1, N), mvrnorm(N, mu = rep(0, nvars), Sigma = cormat))
+  colnames(X) <- names(params)
+  
+  y <- X%*%as.numeric(params)
+  return(data.frame(X[,-1], y=y))
+}
+
+params <- list('I' = 0, 'itnr' = .5, 'educ' = .2, 'c' = .2, 'impuls' = .1, 'planful' = .2)
+
+simDF <- generate_data(list(params = params, N = 200))
+
+head(simDF)
+```
+## Simulate strata
+
+We need to get slightly different parameters for each strata. Let's keep it simple for now -- three strata on one variable
+
+```{r}
+strata_params <- list(high = list(N = 200, params = list('I' = 0, 'itnr' = .5, 'educ' = .2, 'c' = .2, 'impuls' = .3, 'planful' = .2)),
+                      med = list(N = 150, params = list('I' = .4, 'itnr' = .1, 'educ' = .3, 'c' = .25, 'impuls' = .1, 'planful' = .5)),
+                      low = list(N = 50, params = list('I' = -.2, 'itnr' = .8, 'educ' = .1, 'c' = .15, 'impuls' = .2, 'planful' = .1)))
+
+strata_data_list <- lapply(strata_params, generate_data)
+strataDF <- bind_rows(strata_data_list, .id = 'income')
+```
+
+Now we have a big data set with different representation among the three strata. We can now start using the survey package and account for the true population frequency of these groups. In this simulation I'm assuming that the sample representation is inversly related to the population frequency.
+
+## Use survey
+
+First we prepare our data with the information we have about the population.
+
+```{r}
+#turn data into survey design
+strataSVY <- svydesign(ids = ~1, data = strataDF)
+#true population proportion, turned into an expected frequency given our total sample size
+income_dist <- data.frame(income = c('high', 'med', 'low'), 
+                          Freq = nrow(strataDF) * c(.2, .3, .5))
+strataRakeSVY <- rake(design = strataSVY,
+                      sample.margins = list(~income),
+                      population.margins = list(income_dist))
+
+summary(weights(strataRakeSVY)) #see blog post about trimming
+summary(strataRakeSVY)
+```
+
+## Analysizor the datums
+
+```{r}
+summary(svyMod <- svyglm(y ~ 1 + itnr + educ + c + impuls + planful, design = strataRakeSVY))
+summary(glmMod <- glm(y ~ 1 + itnr + educ + c + impuls + planful, data = strataDF))
+
+cat('Absolute deviation of coefficients:')
+round((coef(glmMod) - coef(svyMod)),2)
+cat('Proportional deviation of coefficients:')
+round((coef(glmMod) - coef(svyMod))/coef(svyMod),2)
+```
