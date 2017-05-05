@@ -164,7 +164,7 @@ $(document).ready(function () {
   X &lt;- cbind(rep(1, N), mvrnorm(N, mu = rep(0, nvars), Sigma = cormat))
   colnames(X) &lt;- names(params)
   
-  y &lt;- X%*%as.numeric(params)
+  y &lt;- X%*%as.numeric(params)+rnorm(N, 0, 1)
   return(data.frame(X[,-1], y=y))
 }
 
@@ -178,13 +178,13 @@ simDF &lt;- generate_data(list(params = params, N = 200))</code></pre>
 ## 
 ##     select</code></pre>
 <pre class="r"><code>head(simDF)</code></pre>
-<pre><code>##         itnr        educ           c     impuls    planful          y
-## 1 -0.4393268  1.01861972  0.53536089 -0.4906474  0.6811508  0.1782981
-## 2 -0.5349216  0.03044827 -0.45154296  1.1158573  0.4366331 -0.1527674
-## 3  0.8732153 -0.78476708  0.17529680 -0.5931254  0.9503363  0.4454683
-## 4  0.7686580  2.62839751  0.97978953 -0.8631770  0.7283905  1.1653268
-## 5 -0.6100160 -1.53953478  0.81158773 -1.9280034 -2.6281143 -1.1690206
-## 6  0.3673976  0.61456566 -0.01909981  0.3985104 -0.5608544  0.2304721</code></pre>
+<pre><code>##         itnr       educ          c     impuls    planful           y
+## 1  0.8864500 -1.4497650 -0.3864692  0.5428859  0.9770349  1.36415926
+## 2  0.1964233 -0.7663001 -0.0615969  1.1395607 -0.1670055  1.17161212
+## 3 -0.7371575 -0.4364459  0.1254585  0.6509859 -0.8031162  0.22424220
+## 4  0.6879142 -1.0932683  1.2079501 -0.3838119 -0.6674439 -0.21683393
+## 5 -0.3149884  0.1971105  0.4493813  0.1302690  0.9947851 -0.05600629
+## 6 -0.9811170 -0.4458707 -0.9593141 -2.6572557 -1.5354299 -2.46308686</code></pre>
 <div id="simulate-strata" class="section level2">
 <h2>Simulate strata</h2>
 <p>We need to get slightly different parameters for each strata. Let’s keep it simple for now – three strata on one variable</p>
@@ -224,10 +224,10 @@ summary(weights(strataRakeSVY)) #see blog post about trimming</code></pre>
 </div>
 <div id="analysizor-the-datums" class="section level2">
 <h2>Analysizor the datums</h2>
-<pre class="r"><code>summary(svyMod &lt;- svyglm(y ~ 1 + itnr + educ + c + impuls + planful, design = strataRakeSVY))</code></pre>
+<pre class="r"><code>summary(svyMod &lt;- svyglm(y ~ (1 + itnr + educ + c + impuls + planful), design = strataRakeSVY))</code></pre>
 <pre><code>## 
 ## Call:
-## svyglm(formula = y ~ 1 + itnr + educ + c + impuls + planful, 
+## svyglm(formula = y ~ (1 + itnr + educ + c + impuls + planful), 
 ##     design = strataRakeSVY)
 ## 
 ## Survey design:
@@ -235,16 +235,16 @@ summary(weights(strataRakeSVY)) #see blog post about trimming</code></pre>
 ## 
 ## Coefficients:
 ##             Estimate Std. Error t value Pr(&gt;|t|)    
-## (Intercept)  0.04006    0.02345   1.708   0.0884 .  
-## itnr         0.50714    0.03426  14.803  &lt; 2e-16 ***
-## educ         0.13407    0.03173   4.225 2.97e-05 ***
-## c            0.17031    0.03036   5.609 3.84e-08 ***
-## impuls       0.19852    0.02728   7.276 1.87e-12 ***
-## planful      0.28648    0.03113   9.203  &lt; 2e-16 ***
+## (Intercept)  0.17186    0.07468   2.301 0.021889 *  
+## itnr         0.46932    0.07930   5.918 7.09e-09 ***
+## educ         0.20094    0.09175   2.190 0.029112 *  
+## c            0.18259    0.08513   2.145 0.032572 *  
+## impuls       0.26570    0.07940   3.347 0.000897 ***
+## planful      0.35522    0.07516   4.726 3.19e-06 ***
 ## ---
 ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 ## 
-## (Dispersion parameter for gaussian family taken to be 0.1725993)
+## (Dispersion parameter for gaussian family taken to be 1.020834)
 ## 
 ## Number of Fisher Scoring iterations: 2</code></pre>
 <pre class="r"><code>summary(glmMod &lt;- glm(y ~ 1 + itnr + educ + c + impuls + planful, data = strataDF))</code></pre>
@@ -254,36 +254,36 @@ summary(weights(strataRakeSVY)) #see blog post about trimming</code></pre>
 ## 
 ## Deviance Residuals: 
 ##      Min        1Q    Median        3Q       Max  
-## -1.28942  -0.21395  -0.03657   0.17720   1.11038  
+## -3.10192  -0.61872  -0.01315   0.66462   2.60419  
 ## 
 ## Coefficients:
 ##             Estimate Std. Error t value Pr(&gt;|t|)    
-## (Intercept)  0.13250    0.01811   7.317 1.43e-12 ***
-## itnr         0.39423    0.01938  20.346  &lt; 2e-16 ***
-## educ         0.22978    0.01825  12.594  &lt; 2e-16 ***
-## c            0.19888    0.01854  10.729  &lt; 2e-16 ***
-## impuls       0.21496    0.01930  11.140  &lt; 2e-16 ***
-## planful      0.30554    0.01934  15.798  &lt; 2e-16 ***
+## (Intercept)  0.17656    0.05052   3.495 0.000528 ***
+## itnr         0.40642    0.05584   7.279 1.84e-12 ***
+## educ         0.24761    0.05110   4.846 1.82e-06 ***
+## c            0.21147    0.05461   3.872 0.000126 ***
+## impuls       0.27054    0.05490   4.928 1.22e-06 ***
+## planful      0.30766    0.05604   5.490 7.20e-08 ***
 ## ---
 ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 ## 
-## (Dispersion parameter for gaussian family taken to be 0.12929)
+## (Dispersion parameter for gaussian family taken to be 0.9949453)
 ## 
-##     Null deviance: 304.70  on 399  degrees of freedom
-## Residual deviance:  50.94  on 394  degrees of freedom
-## AIC: 324.83
+##     Null deviance: 704.59  on 399  degrees of freedom
+## Residual deviance: 392.01  on 394  degrees of freedom
+## AIC: 1141.1
 ## 
 ## Number of Fisher Scoring iterations: 2</code></pre>
 <pre class="r"><code>cat('Absolute deviation of coefficients:')</code></pre>
 <pre><code>## Absolute deviation of coefficients:</code></pre>
 <pre class="r"><code>round((coef(glmMod) - coef(svyMod)),2)</code></pre>
 <pre><code>## (Intercept)        itnr        educ           c      impuls     planful 
-##        0.09       -0.11        0.10        0.03        0.02        0.02</code></pre>
+##        0.00       -0.06        0.05        0.03        0.00       -0.05</code></pre>
 <pre class="r"><code>cat('Proportional deviation of coefficients:')</code></pre>
 <pre><code>## Proportional deviation of coefficients:</code></pre>
 <pre class="r"><code>round((coef(glmMod) - coef(svyMod))/coef(svyMod),2)</code></pre>
 <pre><code>## (Intercept)        itnr        educ           c      impuls     planful 
-##        2.31       -0.22        0.71        0.17        0.08        0.07</code></pre>
+##        0.03       -0.13        0.23        0.16        0.02       -0.13</code></pre>
 </div>
 </div>
 

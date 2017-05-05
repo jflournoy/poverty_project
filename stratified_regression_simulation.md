@@ -59,7 +59,7 @@ different strata.
       X <- cbind(rep(1, N), mvrnorm(N, mu = rep(0, nvars), Sigma = cormat))
       colnames(X) <- names(params)
       
-      y <- X%*%as.numeric(params)
+      y <- X%*%as.numeric(params)+rnorm(N, 0, 1)
       return(data.frame(X[,-1], y=y))
     }
 
@@ -78,13 +78,13 @@ different strata.
 
     head(simDF)
 
-    ##          itnr        educ          c     impuls   planful          y
-    ## 1  0.35383218  0.71608131  0.5049562  1.9475718 1.9907803  1.0140368
-    ## 2  1.96047776  0.04959444 -1.4274062 -0.8135715 0.7736104  0.7780415
-    ## 3  1.15044785  1.99699974  0.6095766  2.5806093 0.4877466  1.4521494
-    ## 4 -0.02350452 -0.50563434  1.1903845  0.7379972 0.5586428  0.3107261
-    ## 5  1.97765237 -0.12577823  0.4420169  2.6304827 1.3958758  1.5942973
-    ## 6 -1.72541694 -1.03788186 -0.3644975 -0.4929629 0.3117913 -1.1301224
+    ##          itnr       educ           c     impuls    planful          y
+    ## 1  1.99904498 -0.1038574  0.98238476  1.0969754  0.3478878  2.1936332
+    ## 2  1.45072667  0.8400415 -0.13525350  0.2240975  0.7885432  2.0310455
+    ## 3 -0.65101871  1.0729948 -0.59736318  0.3157750 -1.4793220  0.3876046
+    ## 4  0.03692116  0.2931264  0.95833579 -1.0404636  0.3696342  1.7089557
+    ## 5  2.26005445 -1.5055399 -1.33382528  0.4628079 -0.6861988  0.7718761
+    ## 6 -0.30808425 -1.2065081 -0.06316038  0.8242748  1.8878712 -0.3950116
 
 Simulate strata
 ---------------
@@ -142,11 +142,11 @@ population.
 Analysizor the datums
 ---------------------
 
-    summary(svyMod <- svyglm(y ~ 1 + itnr + educ + c + impuls + planful, design = strataRakeSVY))
+    summary(svyMod <- svyglm(y ~ (1 + itnr + educ + c + impuls + planful), design = strataRakeSVY))
 
     ## 
     ## Call:
-    ## svyglm(formula = y ~ 1 + itnr + educ + c + impuls + planful, 
+    ## svyglm(formula = y ~ (1 + itnr + educ + c + impuls + planful), 
     ##     design = strataRakeSVY)
     ## 
     ## Survey design:
@@ -154,16 +154,16 @@ Analysizor the datums
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)    
-    ## (Intercept)  0.05151    0.02653   1.942   0.0529 .  
-    ## itnr         0.52205    0.03143  16.611  < 2e-16 ***
-    ## educ         0.18991    0.02668   7.118 5.23e-12 ***
-    ## c            0.22059    0.03265   6.757 5.08e-11 ***
-    ## impuls       0.16050    0.02542   6.314 7.33e-10 ***
-    ## planful      0.26210    0.03177   8.251 2.39e-15 ***
+    ## (Intercept) -0.13026    0.07648  -1.703 0.089332 .  
+    ## itnr         0.46564    0.08110   5.742 1.88e-08 ***
+    ## educ         0.16349    0.07591   2.154 0.031875 *  
+    ## c            0.14087    0.07402   1.903 0.057756 .  
+    ## impuls       0.27357    0.07416   3.689 0.000257 ***
+    ## planful      0.26675    0.06864   3.886 0.000120 ***
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
     ## 
-    ## (Dispersion parameter for gaussian family taken to be 0.1721894)
+    ## (Dispersion parameter for gaussian family taken to be 1.151396)
     ## 
     ## Number of Fisher Scoring iterations: 2
 
@@ -174,25 +174,25 @@ Analysizor the datums
     ## glm(formula = y ~ 1 + itnr + educ + c + impuls + planful, data = strataDF)
     ## 
     ## Deviance Residuals: 
-    ##      Min        1Q    Median        3Q       Max  
-    ## -1.12076  -0.21578  -0.04381   0.16223   1.24614  
+    ##     Min       1Q   Median       3Q      Max  
+    ## -2.8383  -0.7132   0.0044   0.6346   3.4081  
     ## 
     ## Coefficients:
     ##             Estimate Std. Error t value Pr(>|t|)    
-    ## (Intercept)  0.13728    0.01785   7.689  1.2e-13 ***
-    ## itnr         0.38999    0.01776  21.963  < 2e-16 ***
-    ## educ         0.24658    0.01895  13.014  < 2e-16 ***
-    ## c            0.23866    0.01823  13.090  < 2e-16 ***
-    ## impuls       0.21321    0.01900  11.223  < 2e-16 ***
-    ## planful      0.29624    0.01867  15.865  < 2e-16 ***
+    ## (Intercept)  0.05880    0.05306   1.108  0.26845    
+    ## itnr         0.32322    0.05239   6.170 1.70e-09 ***
+    ## educ         0.25449    0.05567   4.572 6.49e-06 ***
+    ## c            0.18551    0.05750   3.226  0.00136 ** 
+    ## impuls       0.29095    0.05593   5.202 3.18e-07 ***
+    ## planful      0.31866    0.05408   5.893 8.15e-09 ***
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
     ## 
-    ## (Dispersion parameter for gaussian family taken to be 0.1273545)
+    ## (Dispersion parameter for gaussian family taken to be 1.120559)
     ## 
-    ##     Null deviance: 378.204  on 399  degrees of freedom
-    ## Residual deviance:  50.178  on 394  degrees of freedom
-    ## AIC: 318.79
+    ##     Null deviance: 725.38  on 399  degrees of freedom
+    ## Residual deviance: 441.50  on 394  degrees of freedom
+    ## AIC: 1188.6
     ## 
     ## Number of Fisher Scoring iterations: 2
 
@@ -203,7 +203,7 @@ Analysizor the datums
     round((coef(glmMod) - coef(svyMod)),2)
 
     ## (Intercept)        itnr        educ           c      impuls     planful 
-    ##        0.09       -0.13        0.06        0.02        0.05        0.03
+    ##        0.19       -0.14        0.09        0.04        0.02        0.05
 
     cat('Proportional deviation of coefficients:')
 
@@ -212,4 +212,4 @@ Analysizor the datums
     round((coef(glmMod) - coef(svyMod))/coef(svyMod),2)
 
     ## (Intercept)        itnr        educ           c      impuls     planful 
-    ##        1.66       -0.25        0.30        0.08        0.33        0.13
+    ##       -1.45       -0.31        0.56        0.32        0.06        0.19
