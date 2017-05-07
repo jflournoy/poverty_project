@@ -7,16 +7,17 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
+library(nlme)
 library(dplyr)
 library(multiwayvcov)
 library(broom)
 ```
 EXPAND DATASET TO 1 OBSERVATION PER BUDGETxINDIVIDUAL, MERGE IN INSTRUMENT DETAILS
 ```{r data setup}
-data = read.table("#point to data here#", header=TRUE)
+data = read.table("/home/jflournoy/code_new/poverty/mCTB_kit/data.txt", header=TRUE)
 longdata=reshape(data, 
                  varying= c("c1","c2","c3","c4","c5","c6","c7","c8","c9","c10","c11","c12","c13","c14","c15","c16","c17","c18","c19","c20","c21","c22","c23","c24"), v.names="c",timevar="budget_number", times=c("1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23","24"), direction="long")
-design=read.table("/Users/rx/Desktop/mCTB Kit/instrument_details.txt", header=TRUE)
+design=read.table("/home/jflournoy/code_new/poverty/mCTB_kit/instrument_details.txt", header=TRUE)
 finaldata = merge(longdata,design, by="budget_number", all.x=T, all.y=T)
 ```
 CREATE CHOICESET VARIABLES
@@ -52,10 +53,15 @@ for (j in 1:6){
 ```
 USE NON-LINEAR LEAST SQUARES TO ESTIMATE AGGREGATE PARAMETERS OF BETA-DELTA, CRRA, TIME-SEPARABLE UTILITY
 ```{r non-linear least squares aggregate parameter estimation}
+sd_of_soonerchoice <- sd(finaldata$sooner_choice)
+
+#scale the outcome
+finaldata$sooner_choice_scaled <- finaldata$sooner_choice / sd(finaldata$sooner_choice)
+
 a_start=0.90
 b_start=1
 d_start=0.999
-model=nls(sooner_choice~endowment_later*((((b^t0)*(d^k)*pratio)^(1/(a-1)))/(1+pratio*((b^t0*d^k)*pratio)^(1/(a-1)))), finaldata, start=list(a=a_start,b=b_start, d=d_start))
+model=nls(sooner_choice_scaled~endowment_later*((((b^t0)*(d^k)*pratio)^(1/(a-1)))/(1+pratio*((b^t0*d^k)*pratio)^(1/(a-1)))), finaldata, start=list(a=a_start,b=b_start, d=d_start))
 summary(model, digits=4)
 ###IMPORTANT: THE STATA MODEL USES CLUSTERED SEs WHILE R DOES NOT###
 #vcov_subj = cluster.vcov(model, finaldata$subject_id)
@@ -71,16 +77,13 @@ rate = finaldata$delta^(-30) - 1
 ```
 USE NON-LINEAR LEAST SQUARES TO ESTIMATE INDIVIDUAL PARAMETERS OF BETA-DELTA, CRRA, TIME-SEPARABLE UTILITY (MAY TAKE SOME TIME) GARBAGE BELOW 
 ```{r non-linear least squares individual parameter estimation }
-finaldata$alpha_ind=NA
-finaldata$beta_ind=NA
-finaldata$delta_ind=NA
 id=group_by(finaldata, subject_id)
 ##EXAMPLE OF WHAT THE MODEL SHOULD LOOK LIKE##
-examplemodel=nls(sooner_choice~endowment_later*((((b^t0)*(d^k)*pratio)^(1/(a-1)))/(1+pratio*((b^t0*d^k)*pratio)^(1/(a-1)))), filter(finaldata, subject_id==1), start=list(a=a_start,b=b_start, d=d_start))
+examplemodel=nls(sooner_choice_scaled~endowment_later*((((b^t0)*(d^k)*pratio)^(1/(a-1)))/(1+pratio*((b^t0*d^k)*pratio)^(1/(a-1)))), filter(finaldata, subject_id==1), start=list(a=a_start,b=b_start, d=d_start))
 ##RUN THE INDIVIDUAL NLS MODELS##
 individnlscoef=finaldata %>% group_by(subject_id)  %>% 
   do({
-    tempmodel=try(nls(sooner_choice~endowment_later*((((b^t0)*(d^k)*pratio)^(1/(a-1)))/(1+pratio*((b^t0*d^k)*pratio)^(1/(a-1)))), ., start=list(a=a_start,b=b_start, d=d_start)))
+    tempmodel=try(nls(sooner_choice_scaled~endowment_later*((((b^t0)*(d^k)*pratio)^(1/(a-1)))/(1+pratio*((b^t0*d^k)*pratio)^(1/(a-1)))), ., start=list(a=a_start,b=b_start, d=d_start)))
   if(class(tempmodel)=='try-error'){
     returned=data.frame()
   }else{
@@ -98,3 +101,61 @@ finaldata=left_join(finaldata, individnlscoef, by="subject_id")
 TRANSFORM DISCOUNT FACTOR TO ANNUAL DISCOUNT RATE
 ```{r non-linear least squares individual parameter estimation }
 finaldata$rate_ind = finaldata$delta_ind^(-30) - 1
+```
+
+# Try out nlme
+
+An example:
+
+```{r}
+str(Orange)
+GGally::ggpairs(Orange)
+
+summary(Orange$circumference)
+
+nlMLMod <- nlme(circumference ~ phi1 / (1 + exp(-(age - phi2)/phi3)),
+                data = Orange,
+                fixed = phi1 + phi2 + phi3 ~ 1,
+                random = pdDiag(phi1 + phi2 ~ 1),
+                groups = ~ Tree,
+                start = c(phi1 = 200, phi2 = 700, phi3 = 350))
+
+summary(nlMLMod)
+coef(nlMLMod)
+```
+
+
+```{r}
+a_start=0.90
+b_start=1
+d_start=0.999
+
+choice_nlme_mod=nlme(sooner_choice_scaled~endowment_later*((((b^t0)*(d^k)*pratio)^(1/(a-1)))/(1+pratio*((b^t0*d^k)*pratio)^(1/(a-1)))), 
+              data = finaldata, 
+              fixed = a + b + d ~ 1,
+              random = pdDiag(a + b + d ~ 1),
+              groups = ~ subject_id,
+              start = c(a=a_start,b=b_start, d=d_start),
+              control = nlmeControl(pnlsTol = .001, msVerbose = TRUE))
+
+summary(choice_nlme_mod)
+
+coefs_nlme <- coef(choice_nlme_mod)
+
+coefs_nlme$subject_id <- rownames(coefs_nlme)
+
+coefs_both <- finaldata %>% 
+  select(subject_id, alpha_ind, beta_ind, delta_ind) %>%
+  distinct(subject_id, alpha_ind, beta_ind, delta_ind) %>%
+  mutate(subject_id = as.character(subject_id)) %>%
+  left_join(coefs_nlme)
+```
+
+```{r}
+plot(coefs_both$alpha_ind, coefs_both$a)
+plot(coefs_both$beta_ind, coefs_both$b)
+ggplot2::qplot(coefs_both$beta_ind, coefs_both$b)+ggplot2::coord_cartesian(y=c(1,1.4),x=c(1,1.4))
+plot(coefs_both$delta_ind, coefs_both$d)
+ggplot2::qplot(coefs_both$delta_ind, coefs_both$d)+ggplot2::coord_cartesian(y=c(.9995,1.00805),x=c(.9995,1.01005))
+
+```

@@ -2,7 +2,7 @@
 title: "Stratified Regression Simulations"
 author: "John Flournoy and Rita Ludwig"
 date: "4/12/2017"
-output: md_document
+output: html_document
 ---
 
 ```{r setup, include=FALSE}
@@ -45,7 +45,7 @@ generate_data <- function(gen_info){
   X <- cbind(rep(1, N), mvrnorm(N, mu = rep(0, nvars), Sigma = cormat))
   colnames(X) <- names(params)
   
-  y <- X%*%as.numeric(params)
+  y <- X%*%as.numeric(params)+rnorm(N, 0, 1)
   return(data.frame(X[,-1], y=y))
 }
 
@@ -91,7 +91,7 @@ summary(strataRakeSVY)
 ## Analysizor the datums
 
 ```{r}
-summary(svyMod <- svyglm(y ~ 1 + itnr + educ + c + impuls + planful, design = strataRakeSVY))
+summary(svyMod <- svyglm(y ~ (1 + itnr + educ + c + impuls + planful), design = strataRakeSVY))
 summary(glmMod <- glm(y ~ 1 + itnr + educ + c + impuls + planful, data = strataDF))
 
 cat('Absolute deviation of coefficients:')
