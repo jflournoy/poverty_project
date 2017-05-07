@@ -1,0 +1,48 @@
+---
+title: "Calculating Income-to-Needs Ratio"
+author: "Rita M Ludwig"
+date: "May 4, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(foreign)
+library(plyr)
+rm(list=ls()) # clear the environment
+data = read.spss("/Users/rx/Documents/Research/Poverty/PhaseI_StudyOne/Data/Poverty_PhaseI_StudyOne_Mturk_CLEANED_forANALYSIS.sav", to.data.frame=TRUE)
+```
+SES1 = Number of people currently living in the household
+SES 2 = Annual household income
+Poverty threshold by household size provided by the 2016 US Census.
+
+```{r threshold}
+###Add a column with the correct poverty threshold based on household size (SES1)###
+data["threshold"] = NA
+data$threshold[data$SES1 == 1] = 12486
+data$threshold[data$SES1 == 1 & data$Age >=65] = 11511
+data$threshold[data$SES1 == 2] = 16072
+data$threshold[data$SES1 == 2 & data$Age >=65] = 14507
+data$threshold[data$SES1 == 3] = 18774
+data$threshold[data$SES1 == 4] = 24755
+data$threshold[data$SES1 == 5] = 29854
+data$threshold[data$SES1 == 6] = 34337
+data$threshold[data$SES1 == 7] = 39509
+data$threshold[data$SES1 == 8] = 44188
+data$threshold[data$SES1 >= 9] = 53155
+```
+Next, plop everyone in the middle of their self-reported annual household income bracket (SES2; brackets separated by 10k up to 199,999k; 50k up to 499,999; 500-999,999k; 1mil or greater)
+```{r income adjustment}
+data$SES2=revalue(data$SES2,c("$10 000 - $19 999  "="$10000-$19999","$20 000 - $29 999  "="$20000-$29999","$30 000 - $39 999  "="$30000-$39999","$40 000 - $49 999  "="$40000-$49999","$50 000 - $59 999  "="$50000-$59999","$60 000 - $69 999  "="$60000-$69999","$70 000 - $79 999  "="$70000-$79999","$80 000 - $89 999  "="$80000-$89999","$90 000 - $99 999  "="$90000-$99999","$100 000 - $109 999"="$100000-$109999","$110 000-$119 999  "="$110000-$119999","$120 000-$129 999  "="$120000-$129999","$140 000-$149 999  "="$140000-$149999","$160 000-$169 999  "="$160000-$169999","$170 000-$179 999  "="$170000-$179999","$190 000-$199 999  "="$190000-$199999","$200 000-$249 999  "="$200000-$249999","Less than $10 000  "="Less than $10000"))
+
+data["adj_inc"] = NA
+for (i in 1:19){
+  data$adj_inc[data$SES2 == as.name(paste("$", i, "0000-$", i,"9999", sep=''))] = as.numeric(paste(i,"5000",sep=''))
+}
+data$adj_inc[data$SES2 == "$200000-$249999"]=225000
+data$adj_inc[data$SES2 == "Less than $10000"]=5000
+```
+Now, calculate the income-to-needs ratio and count up how many people are at or below 1.
+```{r INR}
+data["INR"] = (data$adj_inc/data$threshold) 
+sum(data$INR<=1)
+```
