@@ -1,0 +1,34 @@
+---
+title: "Confirmatory analyses testing - Poverty Phase One - Mturk data (no post-stratification)"
+author: "Rita M Ludwig & John C Flournoy"
+date: "May 10, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+rm(list=ls()) # clear the environment
+```
+Join two data sets to begin:
+1) List of parameter values extracted from the mCTB in R script
+2) Complete data set with INR and adj_inc
+
+```{r join data}
+INR = read.table("/Users/rx/Documents/Research/Poverty/PhaseI_StudyOne/Data/Poverty_PhaseI_StudyOne_Mturk_INR", header=TRUE, sep=",")
+params= read.table("/Users/rx/Documents/Research/Poverty/PhaseI_StudyOne/Data/mCTB_params.csv", header=TRUE, sep=",")
+names(params)[names(params)=="subject_id"] = "subject_ID"
+data=data=left_join(INR, params, by="subject_ID")
+data$beedee=data$b*data$d
+```
+Build & run models. One for beta, one for delta, one for beta*delta
+```{r models}
+beta=lm(b~INR+PScore+ConsciScore+BISscore, data=data)
+summary(beta)
+delta=lm(d~INR+PScore+ConsciScore+BISscore, data=data)
+summary(delta)
+beedee=lm(beedee~INR+PScore+ConsciScore+BISscore, data=data)
+summary(beedee)
+
+plot(beta)
+```
+
