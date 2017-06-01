@@ -84,11 +84,13 @@ strataRakeSVY <- rake(design = strataSVY,
                       sample.margins = list(~income),
                       population.margins = list(income_dist))
 
+
+
 summary(weights(strataRakeSVY)) #see blog post about trimming
 summary(strataRakeSVY)
 ```
 
-## Analysizor the datums
+## Analyze the test data
 
 ```{r}
 summary(svyMod <- svyglm(y ~ (1 + itnr + educ + c + impuls + planful), design = strataRakeSVY))

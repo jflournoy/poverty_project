@@ -251,12 +251,14 @@ ggplot(aes(x = pratio, group = k, color = k))+
 ```
 
 ```{r extract parameter estimates}
-coefs_nlme <- coef(choice_nlme_mod)
+coefs_nlme <- coef(choice_nlme_nlslist)
 
-coefs_nlme$subject_id <- rownames(coefs_nlme)
+coefs_nlme$subject_id <- rownames(coef(choice_nlme_nlslist))
+
+write.csv(coefs_nlme, file = '~/code_new/poverty/mCTB_params.csv')
 
 coefs_both <- finaldata %>% 
-  select(subject_id, alpha_ind, beta_ind, delta_ind) %>%
+  dplyr::select(subject_id, alpha_ind, beta_ind, delta_ind) %>%
   distinct(subject_id, alpha_ind, beta_ind, delta_ind) %>%
   mutate(subject_id = as.character(subject_id)) %>%
   left_join(coefs_nlme)
