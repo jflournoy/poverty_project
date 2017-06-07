@@ -49,6 +49,14 @@ pums_data[, Education := convert_SCHL(SCHL)]
 pums_data[, Race := convert_RAC1P(RAC1P)]
 pums_data[, Income := convert_HINCP(HINCP)]
 
+write.csv(pums_data, '~/code_new/poverty/pums_data_short.csv')
+
 pums_xtabs <- xtabs(~Sex + Race + Education + Income, pums_data)
 saveRDS(pums_xtabs, '~/code_new/poverty/pums_xtabs.RDS')
-write.csv(pums_data, '~/code_new/poverty/pums_data_short.csv')
+
+pums_xtabs_no_inc <- xtabs(~Sex + Race + Education, pums_data)
+saveRDS(pums_xtabs_no_inc, '~/code_new/poverty/pums_xtabs_no_inc.RDS')
+
+pums_xtabs_no_inc_no_ed <- xtabs(~Sex + Race, pums_data)
+saveRDS(pums_xtabs_no_inc_no_ed, '~/code_new/poverty/pums_xtabs_no_inc_no_ed.RDS')
+
