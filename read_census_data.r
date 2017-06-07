@@ -30,7 +30,7 @@ convert_SCHL <- function(SCHL){
 }
 convert_HINCP <- function(HINCP){
   ifelse(HINCP < 10000, 5000,
-         ifelse(HINCP < 200000, HINCP %/% 1000 * 10000 + 10000/2,
+         ifelse(HINCP < 200000, HINCP %/% 10000 * 10000 + 10000/2,
                 ifelse(HINCP < 500000, HINCP %/% 50000 * 50000 + 50000/2,
                        ifelse(HINCP < 1e6, 750000,
                               ifelse(HINCP >= 1e6, 1e6, NA)))))
