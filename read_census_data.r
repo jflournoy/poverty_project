@@ -44,10 +44,11 @@ setkey(pus_shortened, SERIALNO)
 setkey(hus_shortened, SERIALNO)
 
 pums_data <- hus_shortened[pus_shortened,]
+setnames(pums_data, 'SEX', 'Sex')
 pums_data[, Education := convert_SCHL(SCHL)]
 pums_data[, Race := convert_RAC1P(RAC1P)]
 pums_data[, Income := convert_HINCP(HINCP)]
 
-pums_xtabs <- xtabs(~SEX + Race + Education + Income, pums_data)
+pums_xtabs <- xtabs(~Sex + Race + Education + Income, pums_data)
 saveRDS(pums_xtabs, '~/code_new/poverty/pums_xtabs.RDS')
 write.csv(pums_data, '~/code_new/poverty/pums_data_short.csv')
