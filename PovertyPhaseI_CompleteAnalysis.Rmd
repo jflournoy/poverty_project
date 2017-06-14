@@ -1,0 +1,261 @@
+---
+title: "Complete Poverty Analysis Script"
+author: "Rita M Ludwig & John C Flournoy"
+date: "June 14, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(nlme)
+library(dplyr)
+library(multiwayvcov)
+library(broom)
+library(plyr)
+library(foreign)
+library(data.table)
+library(tidyverse)
+library(ggplot2)
+library(survey)
+```
+First, run the analysis of the mCTB task (Andreoni, Kuhn and Sprenger, 2015) to extract three parameters: alpha, beta, & delta. These params will be used to test hypotheses in future regression analyses.
+
+Need two .txt files to run this portion of the script: 1) mCTB instrument details & 2) the raw data from the task.
+
+The output of this portion of the script will be 'mCTB_params.csv', a file with the alpha, beta, & delta parameter values for each subject in the dataset.
+
+To be clear about the model we're fitting:
+
+$$
+\text{sooner_choice}=\frac{\text{endowment_later}\cdot(b^{t_0}d^k\text{pratio})^{\frac{1}{a-1}}}{1+\text{pratio}\cdot(b^{t_0}d^k\text{pratio})^{\frac{1}{a-1}}}
+$$
+where $\text{endowment_later}=20$.
+
+In R, this will look like:
+
+```
+sooner_choice ~ ( endowment_later * (b^t0 * d^k * pratio)^(1/(a-1)) ) / ( 1+pratio * (b^t0 * d^k * pratio)^(1/(a-1)) )
+```
+```{r mCTB}
+### IMPORT DATA FROM TWO REQUIRED .TXT FILES ##
+data = read.table("data.txt", header=TRUE)
+longdata=reshape(data, 
+                 varying= c("c1","c2","c3","c4","c5","c6","c7","c8","c9","c10","c11","c12","c13","c14","c15","c16","c17","c18","c19","c20","c21","c22","c23","c24"), v.names="c",timevar="budget_number", times=c("1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23","24"), direction="long")
+design=read.table("instrument_details.txt", header=TRUE)
+finaldata = merge(longdata,design, by="budget_number", all.x=T, all.y=T)
+
+## CREATE CHOICESET VARIABLES ##
+finaldata["t0"] = 0
+finaldata$t0[finaldata$sooner_date == 0] = 1
+finaldata$t0[finaldata$sooner_date != 0] = 0
+finaldata$k=7*as.vector(finaldata$delay_weeks)
+finaldata$pratio=(finaldata$endowment_later/finaldata$endowment_soon)
+
+## DEFINE VALUES FOR EACH OPTION ##
+for (j in 1:6){
+  finaldata[paste('soon_', j, sep='')]=(20/as.vector(finaldata$pratio))-(j-1)*(20/as.vector(finaldata$pratio))/5
+}
+
+finaldata$soon_6=0
+
+for (j in 1:6){
+  finaldata[paste('late_', j, sep='')]=(j-1)*4
+}
+
+## ASSOCIATE CHOICE OPTIONS WITH VALUES ##
+for (j in 1:6){
+  for (i in 1:nrow(finaldata)){
+    if (finaldata$c[i]==j){
+      finaldata$temp=eval(as.name(paste('soon_', j, sep='')),finaldata)
+      finaldata$sooner_choice[i] =finaldata$temp[i]
+    }
+  }
+}
+
+
+## USE NON-LINEAR LEAST SQUARES TO ESTIMATE INDIVIDUAL PARAMETERS OF BETA-DELTA, CRRA, TIME-SEPARABLE UTILITY (MAY TAKE SOME TIME) ##
+choice_nlslist <- nlsList(sooner_choice ~ ( endowment_later * (b^t0 * d^k * pratio)^(1/(a-1)) ) / ( 1+pratio * (b^t0 * d^k * pratio)^(1/(a-1)) ) | subject_id, 
+                          data = finaldata[,-c(26:34)], 
+                          start = c(a=a_start,b=b_start, d=d_start),
+                          control = list(maxiter = 1000, minFactor = 1/2^20))
+
+summary(choice_nlslist, pool = T)
+
+choice_nlme_nlslist <- nlme.nlsList(model = choice_nlslist,
+                                   random = pdDiag(a + b + d ~ 1),
+                                   method = 'REML',
+                                   start = c(a=a_start,b=b_start, d=d_start),
+                                   control = nlmeControl(pnlsTol=.33775, msVerbose = T))
+
+BIC(choice_nlme_mod)-BIC(choice_nlme_nlslist)
+exp((BIC(choice_nlme_mod)-BIC(choice_nlme_nlslist))/2)
+
+choice_nlme_nlslist_noa <- nlme.nlsList(model = choice_nlslist,
+                                   random = pdDiag(b + d ~ 1),
+                                   method = 'REML',
+                                   start = c(a=a_start,b=b_start, d=d_start),
+                                   control = nlmeControl(pnlsTol=.05375, msVerbose = T))
+
+BIC(choice_nlme_nlslist_noa)-BIC(choice_nlme_nlslist)
+exp((BIC(choice_nlme_nlslist_noa)-BIC(choice_nlme_nlslist))/2)
+
+choice_nlme_nlslist_ML <- update(choice_nlme_nlslist, method = 'ML')
+
+summary(choice_nlme_nlslist)
+round(sapply(coef(choice_nlme_nlslist)-coef(choice_nlme_nlslist_ML),mean),5)
+
+## EXTRACT PARAMETER ESTIMATES AND SAVE ##
+coefs_nlme <- coef(choice_nlme_nlslist)
+
+coefs_nlme$subject_id <- rownames(coef(choice_nlme_nlslist))
+
+write.csv(coefs_nlme, file = 'mCTB_params.csv')
+
+coefs_both <- finaldata %>% 
+  dplyr::select(subject_id, alpha_ind, beta_ind, delta_ind) %>%
+  distinct(subject_id, alpha_ind, beta_ind, delta_ind) %>%
+  mutate(subject_id = as.character(subject_id)) %>%
+  left_join(coefs_nlme)
+```
+
+Next, calculate the income-to-needs ratio based on these variables in the dataset: SES1 = Number of people currently living in the household & SES 2 = Annual household income.
+
+Poverty threshold by household size provided by the 2016 US Census.
+
+Need the raw survey data to run the script.
+
+```{r INR}
+data = read.spss("Poverty_PhaseI_StudyOne_Mturk_CLEANED_forANALYSIS.sav", to.data.frame=TRUE)
+### ADD A COLUMN WITH THE CORRECT POVERTY THRESHOLD BASED ON HOUSEHOLD SIZE(SES1) ###
+data["threshold"] = NA
+data$threshold[data$SES1 == 1] = 12486
+data$threshold[data$SES1 == 1 & data$Age >=65] = 11511
+data$threshold[data$SES1 == 2] = 16072
+data$threshold[data$SES1 == 2 & data$Age >=65] = 14507
+data$threshold[data$SES1 == 3] = 18774
+data$threshold[data$SES1 == 4] = 24755
+data$threshold[data$SES1 == 5] = 29854
+data$threshold[data$SES1 == 6] = 34337
+data$threshold[data$SES1 == 7] = 39509
+data$threshold[data$SES1 == 8] = 44188
+data$threshold[data$SES1 >= 9] = 53155
+
+## PUT EVERYONE IN THE CENTER OF THEIR SELF-REPORTED INCOME BRACKET (SES2; brackets separated by 10k up to 199,999k; 50k up to 499,999; 500-999,999k; 1mil or greater) ## 
+data$SES2=revalue(data$SES2,c("$10 000 - $19 999  "="$10000-$19999","$20 000 - $29 999  "="$20000-$29999","$30 000 - $39 999  "="$30000-$39999","$40 000 - $49 999  "="$40000-$49999","$50 000 - $59 999  "="$50000-$59999","$60 000 - $69 999  "="$60000-$69999","$70 000 - $79 999  "="$70000-$79999","$80 000 - $89 999  "="$80000-$89999","$90 000 - $99 999  "="$90000-$99999","$100 000 - $109 999"="$100000-$109999","$110 000-$119 999  "="$110000-$119999","$120 000-$129 999  "="$120000-$129999","$140 000-$149 999  "="$140000-$149999","$160 000-$169 999  "="$160000-$169999","$170 000-$179 999  "="$170000-$179999","$190 000-$199 999  "="$190000-$199999","$200 000-$249 999  "="$200000-$249999","Less than $10 000  "="Less than $10000"))
+
+## CALCULATE INR ##
+data["adj_inc"] = NA
+for (i in 1:19){
+  data$adj_inc[data$SES2 == as.name(paste("$", i, "0000-$", i,"9999", sep=''))] = as.numeric(paste(i,"5000",sep=''))
+}
+data$adj_inc[data$SES2 == "$200000-$249999"]=225000
+data$adj_inc[data$SES2 == "Less than $10000"]=5000
+data["INR"] = (data$adj_inc/data$threshold) 
+sum(data$INR<=1)
+
+```
+
+Now, import census data to allow for post-stratification in analyses. Match variables from the Census and from the survey.
+
+Need both Census data files (a & b); files used here are from the 2015 Census.
+```{r Census Import}
+pus_a <- rbindlist(list(fread('ss15pusa.csv'),fread('ss15pusb.csv')))
+
+pus_shortened <- pus_a[,.(SERIALNO,SEX,AGEP,SCHL,RAC1P)]
+rm(pus_a);gc()
+
+convert_RAC1P <- function(RAC1P){
+  #white = 1
+  #black = 2
+  #indian/alaskan = 3
+  #asian/hawaiian = 4
+  #other = 5
+  ifelse(RAC1P == 1, 1,
+         ifelse(RAC1P == 2, 2,
+                ifelse(RAC1P %in% c(3,5), 3,
+                       ifelse(RAC1P %in% c(6,7), 4,
+                              ifelse(RAC1P %in% c(8,9), 5, NA)))))
+}
+convert_SCHL <- function(SCHL){
+  ifelse(SCHL %in% 1:15, 1,
+         ifelse(SCHL %in% 16:17, 2,
+                ifelse(SCHL %in% 18:19, 3, SCHL - 16)))
+}
+convert_HINCP <- function(HINCP){
+  ifelse(HINCP < 10000, 5000,
+         ifelse(HINCP < 200000, HINCP %/% 10000 * 10000 + 10000/2,
+                ifelse(HINCP < 500000, HINCP %/% 50000 * 50000 + 50000/2,
+                       ifelse(HINCP < 1e6, 750000,
+                              ifelse(HINCP >= 1e6, 1e6, NA)))))
+}
+
+hus_a <- rbindlist(list(fread('~/code_new/poverty/census/ss15husa.csv'),fread('~/code_new/poverty/census/ss15husb.csv')))
+hus_shortened <- hus_a[,.(SERIALNO,HINCP)]
+rm(hus_a);gc()
+
+setkey(pus_shortened, SERIALNO)
+setkey(hus_shortened, SERIALNO)
+
+pums_data <- hus_shortened[pus_shortened,]
+setnames(pums_data, 'SEX', 'Sex')
+pums_data[, Education := convert_SCHL(SCHL)]
+pums_data[, Race := convert_RAC1P(RAC1P)]
+pums_data[, Income := convert_HINCP(HINCP)]
+
+write.csv(pums_data, '~/code_new/poverty/pums_data_short.csv')
+
+pums_xtabs <- xtabs(~Sex + Race + Education + Income, pums_data)
+saveRDS(pums_xtabs, '~/code_new/poverty/pums_xtabs.RDS')
+
+pums_xtabs_no_inc <- xtabs(~Sex + Race + Education, pums_data)
+saveRDS(pums_xtabs_no_inc, '~/code_new/poverty/pums_xtabs_no_inc.RDS')
+
+pums_xtabs_no_inc_no_ed <- xtabs(~Sex + Race, pums_data)
+saveRDS(pums_xtabs_no_inc_no_ed, '~/code_new/poverty/pums_xtabs_no_inc_no_ed.RDS')
+
+## TRANSFORM SURVEY VARIABLES TO MATCH NEW CENSUS VARIABLES ##
+data$Sex=revalue(data$Gender,c("Male  "="1","Female"="2"))
+data$Education=revalue(data$Education, c("Less than high school"="1","High school graduate "="2","Some college         "="3","2 year degree        "="4","4 year degree        "="5","Professional degree  "="6","Masters              "="7"))
+data$Race=revalue(data$Ethnicity, c("White  not of Hispanic Origin    "="1","Black  not of Hispanic Origin    "="2","American Indian or Alaskan Native"="3","Asian or Pacific Islander        "="4","South Asian or Indian            "="4","Hispanic                         "="5","Other                            "="5"))
+data$Income=data$adj_inc
+
+```
+Finally, run the regressions. This output will include a 'regular' regression, and a regression where the sample has been post-stratisfied according to Census weights.
+```{r Regression}
+params <- read.table("mCTB_params.csv", header=TRUE, sep=",")
+names(params)[names(params)=="subject_id"] <- "subject_ID"
+data <- left_join(data, params, by="subject_ID")
+data$beedee <- data$b*data$d
+data$Income=as.character(data$Income)
+
+## PLANNED REGRESSION ##
+#' 
+#' The model we will be estimating is:
+#'   
+#' $$
+#' \text{DELAYDISCOUNT_PARAM} = \beta_0 + \beta_1\text{ITNR} + \beta_2\text{EDUC}+\beta_3\text{C}+\beta_4\text{IMPULS}+\beta_5\text{PLANFUL}+\epsilon.
+#' $$
+#' 
+
+dataSVY <- svydesign(ids = ~1, data = data)
+dataPostStratSVY <- postStratify(design = dataSVY,
+                                 strata = ~Sex + Race + Education,
+                                 population = pums_xtabs,
+                                 partial=TRUE)
+
+summary(weights(dataPostStratSVY)) #see blog post about trimming
+summary(dataPostStratSVY)
+
+summary(svyMod <- svyglm(d ~ (1 + INR + PScore + ConsciScore + BISscore), design = dataPostStratSVY))
+summary(glmMod <- glm(d ~ 1 + INR + PScore + ConsciScore + BISscore, data = data))
+
+summary(svyMod <- svyglm(d ~ (1 + INR), design = dataPostStratSVY))
+summary(glmMod <- glm(d ~ 1 + INR, data = data))
+
+cat('Absolute deviation of coefficients:')
+round((coef(glmMod) - coef(svyMod)),2)
+cat('Proportional deviation of coefficients:')
+round((coef(glmMod) - coef(svyMod))/coef(svyMod),2)
+
+
+```
