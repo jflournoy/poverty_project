@@ -223,6 +223,14 @@ individnlscoef=finaldata %&gt;% group_by(subject_id)  %&gt;%
   })
 ##JOIN THE COEFFICIENT DATAFRAME WITH THE DATASET##
 finaldata=left_join(finaldata, individnlscoef, by=&quot;subject_id&quot;)</code></pre>
+<p>Add in data about income and self-report</p>
+<pre class="r"><code>INR &lt;- read.table(&quot;./Poverty_PhaseI_StudyOne_Mturk_INR&quot;, header=TRUE, sep=&quot;,&quot;) %&gt;%
+  select(subject_ID, INR, PScore, ConsciScore, BISscore) %&gt;%
+  rename(subject_id = subject_ID)
+
+
+finaldata = left_join(finaldata, INR) %&gt;% arrange(subject_id)</code></pre>
+<pre><code>## Joining, by = &quot;subject_id&quot;</code></pre>
 <p>TRANSFORM DISCOUNT FACTOR TO MONTHLY DISCOUNT RATE</p>
 <pre class="r"><code>finaldata$rate_ind = finaldata$delta_ind^(-30) - 1</code></pre>
 <div id="try-out-nlme" class="section level1">
@@ -364,7 +372,7 @@ choice_nlme_mod_noa=nlme(sooner_choice ~ ( endowment_later * (b^t0 * d^k * prati
 ## Number of Groups: 210</code></pre>
 <pre class="r"><code>#Or use start from nlsList
 choice_nlslist &lt;- nlsList(sooner_choice ~ ( endowment_later * (b^t0 * d^k * pratio)^(1/(a-1)) ) / ( 1+pratio * (b^t0 * d^k * pratio)^(1/(a-1)) ) | subject_id, 
-                          data = finaldata[,-c(26:34)], 
+                          data = finaldata[,-c(26:33,37:38)], 
                           start = c(a=a_start,b=b_start, d=d_start),
                           control = list(maxiter = 1000, minFactor = 1/2^20))</code></pre>
 <pre><code>## Warning: 116 errors caught in nls(model, data = data, control = controlvals, start = start).  The error messages and their frequencies are
@@ -380,7 +388,7 @@ choice_nlslist &lt;- nlsList(sooner_choice ~ ( endowment_later * (b^t0 * d^k * p
 <pre class="r"><code>summary(choice_nlslist, pool = T)</code></pre>
 <pre><code>## Call:
 ##   Model: sooner_choice ~ (endowment_later * (b^t0 * d^k * pratio)^(1/(a - 1)))/(1 + pratio * (b^t0 * d^k * pratio)^(1/(a - 1))) | subject_id 
-##    Data: finaldata[, -c(26:34)] 
+##    Data: finaldata[, -c(26:33, 37:38)] 
 ## 
 ## Coefficients:
 ##    a 
@@ -1113,7 +1121,7 @@ choice_nlslist &lt;- nlsList(sooner_choice ~ ( endowment_later * (b^t0 * d^k * p
 <pre class="r"><code>summary(choice_nlme_nlslist)</code></pre>
 <pre><code>## Nonlinear mixed-effects model fit by REML
 ##   Model: sooner_choice ~ (endowment_later * (b^t0 * d^k * pratio)^(1/(a -      1)))/(1 + pratio * (b^t0 * d^k * pratio)^(1/(a - 1))) 
-##  Data: finaldata[, -c(26:34)] 
+##  Data: finaldata[, -c(26:33, 37:38)] 
 ##        AIC      BIC    logLik
 ##   26904.83 26950.51 -13445.42
 ## 
@@ -1183,28 +1191,117 @@ ggplot(aes(x = pratio, group = k, color = k))+
   coord_cartesian(y=c(-.5,20.5))+
   theme(panel.background = element_blank())</code></pre>
 <p><img src="mCTB_in_R_files/figure-html/plot%20individual%20data-3.png" width="3840" /></p>
-<pre class="r"><code>coefs_nlme &lt;- coef(choice_nlme_mod)
+<pre class="r"><code>coefs_nlme &lt;- coef(choice_nlme_nlslist)
 
-coefs_nlme$subject_id &lt;- rownames(coefs_nlme)
+coefs_nlme$subject_id &lt;- rownames(coef(choice_nlme_nlslist))
+
+write.csv(coefs_nlme, file = &#39;~/code_new/poverty/mCTB_params.csv&#39;)
 
 coefs_both &lt;- finaldata %&gt;% 
-  select(subject_id, alpha_ind, beta_ind, delta_ind) %&gt;%
+  dplyr::select(subject_id, alpha_ind, beta_ind, delta_ind) %&gt;%
   distinct(subject_id, alpha_ind, beta_ind, delta_ind) %&gt;%
   mutate(subject_id = as.character(subject_id)) %&gt;%
   left_join(coefs_nlme)</code></pre>
 <pre><code>## Joining, by = &quot;subject_id&quot;</code></pre>
 <pre class="r"><code>plot(coefs_both$alpha_ind, coefs_both$a)</code></pre>
-<p><img src="mCTB_in_R_files/figure-html/unnamed-chunk-1-1.png" width="672" /></p>
+<p><img src="mCTB_in_R_files/figure-html/unnamed-chunk-2-1.png" width="672" /></p>
 <pre class="r"><code>plot(coefs_both$beta_ind, coefs_both$b)</code></pre>
-<p><img src="mCTB_in_R_files/figure-html/unnamed-chunk-1-2.png" width="672" /></p>
+<p><img src="mCTB_in_R_files/figure-html/unnamed-chunk-2-2.png" width="672" /></p>
 <pre class="r"><code>ggplot2::qplot(coefs_both$beta_ind, coefs_both$b)+ggplot2::coord_cartesian(y=c(.5,1.4),x=c(.5,1.4))</code></pre>
 <pre><code>## Warning: Removed 127 rows containing missing values (geom_point).</code></pre>
-<p><img src="mCTB_in_R_files/figure-html/unnamed-chunk-1-3.png" width="672" /></p>
+<p><img src="mCTB_in_R_files/figure-html/unnamed-chunk-2-3.png" width="672" /></p>
 <pre class="r"><code>plot(coefs_both$delta_ind, coefs_both$d)</code></pre>
-<p><img src="mCTB_in_R_files/figure-html/unnamed-chunk-1-4.png" width="672" /></p>
+<p><img src="mCTB_in_R_files/figure-html/unnamed-chunk-2-4.png" width="672" /></p>
 <pre class="r"><code>ggplot2::qplot(coefs_both$delta_ind, coefs_both$d)+ggplot2::coord_cartesian(y=c(.9900,1.005),x=c(.965,1.01005))</code></pre>
 <pre><code>## Warning: Removed 127 rows containing missing values (geom_point).</code></pre>
-<p><img src="mCTB_in_R_files/figure-html/unnamed-chunk-1-5.png" width="672" /></p>
+<p><img src="mCTB_in_R_files/figure-html/unnamed-chunk-2-5.png" width="672" /></p>
+<pre class="r"><code>choice_nlme_mod_ML &lt;- update(choice_nlme_mod, method = &#39;ML&#39;, control = nlmeControl(pnlsTol=1.045, msVerbose = T))</code></pre>
+<pre><code>##   0:     29295.621:  3.43482  3.11326  7.02080
+##   1:     29295.621:  3.43482  3.11326  7.02080
+##   0:     28452.184:  2.90938  2.99040  6.75262
+##   1:     28452.184:  2.91139  2.99073  6.75278
+##   2:     28452.184:  2.91145  2.99061  6.75294
+##   3:     28452.184:  2.91145  2.99064  6.75284
+##   0:     28452.184:  2.91144  2.99067  6.75287
+##   1:     28452.184:  2.91144  2.99067  6.75287</code></pre>
+<pre class="r"><code>choice_nlme_INR_mod &lt;- nlme(sooner_choice ~ ( endowment_later * (b^t0 * d^k * pratio)^(1/(a-1)) ) / ( 1+pratio * (b^t0 * d^k * pratio)^(1/(a-1)) ), 
+              data = finaldata, 
+              fixed = a + b + d ~ 1 + scale(INR),
+              random = pdDiag(a + b + d ~ 1), 
+              groups = ~ subject_id,
+              method = &#39;REML&#39;,
+              start = c(a=a_start, 0, b=b_start, 0, d=d_start, 0),
+              control = nlmeControl(pnlsTol=1.045, msVerbose = T))</code></pre>
+<pre><code>##   0:     29303.138:  3.43253  3.10779  7.01883
+##   1:     29303.138:  3.43253  3.10779  7.01883
+##   0:     28490.152:  3.63080  3.07501  6.85103
+##   1:     28490.084:  3.60165  3.06059  6.83098
+##   2:     28490.053:  3.59035  3.06514  6.84397
+##   3:     28490.040:  3.57715  3.06127  6.83267
+##   4:     28490.036:  3.56495  3.05784  6.84517
+##   5:     28490.027:  3.56423  3.05967  6.83827
+##   6:     28490.026:  3.55780  3.05801  6.83555
+##   7:     28490.026:  3.55741  3.05861  6.83668
+##   8:     28490.026:  3.55716  3.05869  6.83652
+##   9:     28490.026:  3.55695  3.05849  6.83662
+##  10:     28490.026:  3.55669  3.05846  6.83644
+##  11:     28490.026:  3.55667  3.05853  6.83654
+##  12:     28490.026:  3.55670  3.05855  6.83654
+##   0:     28490.071:  3.59716  3.07083  6.84688
+##   1:     28490.050:  3.58865  3.06123  6.83645
+##   2:     28490.039:  3.57461  3.06501  6.84432
+##   3:     28490.032:  3.56558  3.05909  6.83180
+##   4:     28490.027:  3.56369  3.05944  6.83705
+##   5:     28490.026:  3.55818  3.05990  6.83795
+##   6:     28490.026:  3.55821  3.05873  6.83649
+##   7:     28490.026:  3.55777  3.05876  6.83683
+##   8:     28490.026:  3.55742  3.05865  6.83641
+##   9:     28490.026:  3.55732  3.05864  6.83657
+##  10:     28490.026:  3.55698  3.05856  6.83668
+##  11:     28490.026:  3.55696  3.05858  6.83661
+##  12:     28490.026:  3.55687  3.05849  6.83653</code></pre>
+<pre class="r"><code>AIC(choice_nlme_mod_ML, choice_nlme_INR_mod)</code></pre>
+<pre><code>## Warning in AIC.default(choice_nlme_mod_ML, choice_nlme_INR_mod): models are
+## not all fitted to the same number of observations</code></pre>
+<pre><code>##                     df      AIC
+## choice_nlme_mod_ML   7 28254.46
+## choice_nlme_INR_mod 10 28376.35</code></pre>
+<pre class="r"><code>summary(choice_nlme_INR_mod)</code></pre>
+<pre><code>## Nonlinear mixed-effects model fit by REML
+##   Model: sooner_choice ~ (endowment_later * (b^t0 * d^k * pratio)^(1/(a -      1)))/(1 + pratio * (b^t0 * d^k * pratio)^(1/(a - 1))) 
+##  Data: finaldata 
+##        AIC      BIC    logLik
+##   28376.35 28441.59 -14178.17
+## 
+## Random effects:
+##  Formula: list(a ~ 1, b ~ 1, d ~ 1)
+##  Level: subject_id
+##  Structure: Diagonal
+##         a.(Intercept) b.(Intercept) d.(Intercept) Residual
+## StdDev:    0.09067611      0.153492   0.003516951 3.309252
+## 
+## Fixed effects: a + b + d ~ 1 + scale(INR) 
+##                   Value   Std.Error   DF  t-value p-value
+## a.(Intercept) 0.9263010 0.007116915 4825  130.155  0.0000
+## a.scale(INR)  0.0210965 0.007056183 4825    2.990  0.0028
+## b.(Intercept) 0.8422895 0.011810765 4825   71.315  0.0000
+## b.scale(INR)  0.0022545 0.012269889 4825    0.184  0.8542
+## d.(Intercept) 0.9963755 0.000255151 4825 3905.050  0.0000
+## d.scale(INR)  0.0002529 0.000264873 4825    0.955  0.3397
+##  Correlation: 
+##               a.(In) a.(INR b.(In) b.(INR d.(In)
+## a.scale(INR)   0.013                            
+## b.(Intercept)  0.027  0.001                     
+## b.scale(INR)   0.001  0.023  0.019              
+## d.(Intercept)  0.018  0.014 -0.048  0.005       
+## d.scale(INR)   0.015  0.086  0.006 -0.033  0.011
+## 
+## Standardized Within-Group Residuals:
+##           Min            Q1           Med            Q3           Max 
+## -5.6817582645 -0.0063591879  0.0001561472  0.1938210493  5.1371127645 
+## 
+## Number of Observations: 5040
+## Number of Groups: 210</code></pre>
 </div>
 
 
