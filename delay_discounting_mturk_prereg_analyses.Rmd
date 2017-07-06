@@ -12,5 +12,116 @@ Here we analyze data collected on 210 MTurk participants according to the prereg
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+# Estimating delay discounting parameters
+
+From the registration:
+
+>Individual differences in delay discounting (d) and present-orientation (b) are calculated using the regression model proposed in Andreoni, J., Kuhn, M. A., &amp; Sprenger, C. (2015). Measuring time preferences: A comparison of experimental methods. Journal of Economic Behavior &amp; Organization, 116, 451-464. Specifically, a, b and d are estimated using the following non-linear regression equation: `sooner_choice ~ ( endowment_later * (b^t0 * d^k * pratio)^(1/(a-1)) ) / ( 1+pratio * (b^t0 * d^k * pratio)^(1/(a-1)) )`. This model is first fit using `nls` (stats package version 3.4.0) in R (version 3.4.0). It is then fit using `nlsList` to get appropriate starting values for each individual for a multi-level model to be fit using `nlme`(package nlme version 3.1.131). The model fit using these random effect starting values is compared to a model fit starting with default values. Additionally, since we are not interested in individual differences in the a parameter, we compare models from both of these procedures to a model without a random effect for a. 
+See [mCTB_in_R.html](mCTB_in_R.html). In brief, we used multi-level non-linear models to estimate individual effects for all parameters according to the preregistered model of delay-discounting.
+
+# Income to needs ratio
+
+See [INR_Calc.html](INR_Calc.html). INR is a simple transformation of income and household size.
+
+From the registration:
+
+>INR is a ratio of self-reported income divided by the U.S. Census poverty threshold for a household of that size. We will use the 2016 U.S. Census poverty thresholds for reference (because they are the most recently published at this time). In this data set, INR is calculated by taking the participants' adjusted self-reported income level (variable name: adj_inc) and dividing it based on the poverty threshold for the participants' self-reported household size (variable name: SES1) and age (variable name: Age). 
+
+## Calculating population frequencies from cencus data
+
+See [read_census_data.r](read_census_data.r) for more information about census data and cross-tabs calculation.
+
 # Post-stratified relation between delay discounting and INR
 
+From the registration: 
+
+>Regression with post-stratification. The regression will be adjusted so that estimates are generalizable to a national population. To do so, we will use the survey package (version 3.31.5) to weight the observations in this data set using frequencies of demographics from the US census 2015. Specifically, we will post-stratify using gender, age-group, ethnicity, income, and education.
+
+>For regression 1:
+>DV – Extracted beta parameter. IV – INR. Covariates – Planfulness, Conscientiousness, and Impulsivity scale scores.
+>For regression 2:
+>DV – Extracted delta parameter. IV – INR. Covariates – Planfulness, Conscientiousness, and Impulsivity scale scores.
+>For regression 3:
+>DV – beta*delta. IV – INR. Covariates – Planfulness, Conscientiousness, and Impulsivity scale scores.
+
+$$
+\text{DELAYDISCOUNT_PARAM} = \beta_0 + \beta_1\text{INR} + \beta_3\text{C}+\beta_4\text{IMPULS}+\beta_5\text{PLANFUL}+\epsilon.
+$$
+
+In our initial attempt to post-stratify on gender, age-group, ethnicity, income, and education, we ran into a the problem that a large number of cells in the cross tabulation were not represented with even a single participant in the MTurk data set. For this reason, we greatly simplified the post-stratification scheme to use just gender (male, femaile), income (quintiles), and education (less than highschool, highschool or equivalent, completed some college, completed associates or above).
+
+## Deviation from preregistration
+
+*Specifically, we use only a subset of variables for post-stratification.*
+
+```{r}
+library(survey)
+library(tidyverse)
+
+pums_xtabs <- readRDS('~/code_new/poverty/pums_xtabs_no_race.RDS')
+
+INR <- read.table("./Poverty_PhaseI_StudyOne_Mturk_INR", header=TRUE, sep=",")
+data <- INR
+# params <- read.table("./mCTB_params.csv", header=TRUE, sep=",")
+# names(params)[names(params)=="subject_id"] <- "subject_ID"
+# data <- left_join(INR, params, by="subject_ID")
+data$beedee <- data$b*data$d
+data$d10 <- scale(data$d)
+
+census_breaks <- c(-Inf, 22800, 43511, 72001, 117002, Inf)
+data$Income_raw <- data$Income
+data$Income <- cut(data$Income_raw,
+                   breaks = census_breaks, 
+                   dig.lab = -1)
+
+data$Education_raw <- data$Education
+data$Education <- as.numeric(c(`1`=1, `2`=2, `3`=3, `4`=4, `5`=4, `6`=4, `7`=4, `8`=4)[as.character(data$Education_raw)])
+
+xtabs(~Sex+Education+Income, data = data)
+
+data_c <- within(data,{
+  INR = INR - 2.75
+  PScore = PScore - mean(PScore)
+  ConsciScore = ConsciScore- mean(ConsciScore)
+  BISscore = BISscore - mean(BISscore)
+})
+
+dataSVY <- svydesign(ids = ~1, data = data_c)
+dataPostStratSVY <- postStratify(design = dataSVY,
+                                 strata = ~Sex + Education+Income,
+                                 population = pums_xtabs,
+                                 partial = T)
+
+summary(weights(dataPostStratSVY)) #see blog post about trimming
+
+summary(svyMod <- svyglm(d10 ~ (1 + INR), design = dataPostStratSVY))
+summary(svyMod <- svyglm(d10 ~ (1 + INR + PScore), design = dataPostStratSVY))
+summary(svyMod <- svyglm(d10 ~ (1 + INR + ConsciScore), design = dataPostStratSVY))
+summary(svyMod <- svyglm(d10 ~ (1 + INR + BISscore), design = dataPostStratSVY))
+summary(svyMod <- svyglm(d10 ~ (1 + INR + PScore + ConsciScore), design = dataPostStratSVY))
+summary(svyMod <- svyglm(d10 ~ (1 + INR + PScore + ConsciScore + BISscore), design = dataPostStratSVY))
+```
+
+## Addendum to preregistration
+
+### Flat weights
+
+
+### Raw regression
+
+```{r}
+
+summary(glmMod <- glm(d10 ~ (1), data = data_c))
+summary(glmMod <- glm(d10 ~ (1 + INR), data = data_c))
+summary(glmMod <- glm(d10 ~ (1 + INR + PScore), data = data_c))
+summary(glmMod <- glm(d10 ~ (1 + INR + ConsciScore), data = data_c))
+summary(glmMod <- glm(d10 ~ (1 + INR + BISscore), data = data_c))
+summary(glmMod <- glm(d10 ~ (1 + INR + PScore + ConsciScore), data = data_c))
+summary(glmMod <- glm(d10 ~ (1 + INR + PScore + ConsciScore + BISscore), data = data_c))
+
+
+cat('Absolute deviation of coefficients:')
+round((coef(glmMod) - coef(svyMod)),4)
+cat('Proportional deviation of coefficients:')
+round((coef(glmMod) - coef(svyMod))/coef(svyMod),2)
+```
