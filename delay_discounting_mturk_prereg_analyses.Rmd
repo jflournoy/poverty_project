@@ -1,0 +1,16 @@
+---
+title: "Delay Discounting - MTurk Sample - Preregistered Analyses"
+author: "Rita Ludwig & John Flournoy"
+output: html_document
+---
+
+# Introduction
+
+Here we analyze data collected on 210 MTurk participants according to the preregistration at [this](https://osf.io/3hrme/) osf project. Some pre-registered analyses led us to perform additional, non-specified analyses that should be considered data dependent, though these analysis choices were not made in response to _p_-values.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Post-stratified relation between delay discounting and INR
+
