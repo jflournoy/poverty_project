@@ -121,7 +121,7 @@ individnlscoef=finaldata %>% group_by(subject_id)  %>%
       delta_ind=summary(tempmodel)$coefficients[3]
     )
   }
-  return(returned)
+  returned
   })
 ##JOIN THE COEFFICIENT DATAFRAME WITH THE DATASET##
 finaldata=left_join(finaldata, individnlscoef, by="subject_id")
@@ -241,11 +241,11 @@ ggplot(aes(x = pratio, y = sooner_choice, group = k, color = k))+
 
 finaldata %>%
   # filter(subject_id < 50) %>%
-ggplot(aes(x = k, y = sooner_choice))+
+ggplot(aes(x = delay_weeks - sooner_date_weeks, y = sooner_choice, group = t0, color = t0))+
   geom_point(alpha=.8, position = position_jitter())+
-  geom_line(stat = 'smooth', method = 'gam', formula = y~s(x,k=3,bs='cs'))+
+  geom_line(stat = 'smooth', method = 'lm', formula = y~x)+
   facet_wrap(~subject_id)+
-  scale_color_viridis(discrete = T, begin=0, end=.75)+
+  scale_color_viridis(discrete = F, begin=0, end=.75)+
   coord_cartesian(y=c(-.5,20.5))+
   theme(panel.background = element_blank())
 
