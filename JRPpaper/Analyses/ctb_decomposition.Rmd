@@ -1,0 +1,124 @@
+---
+title: "CTB Modeling"
+author: "John Flournoy"
+date: "October 20, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(nlme)
+data_dir_base <- '/home/jflournoy/code_new/poverty_project/JRPpaper/'
+```
+
+To be clear about the model we're fitting:
+
+$$
+\text{sooner_choice}=\frac{\text{endowment_later}\cdot(b^{t_0}d^k\text{pratio})^{\frac{1}{a-1}}}{1+\text{pratio}\cdot(b^{t_0}d^k\text{pratio})^{\frac{1}{a-1}}}
+$$
+where $\text{endowment_later}=20$.
+
+In R, this will look like:
+
+```
+sooner_choice ~ ( endowment_later * (b^t0 * d^k * pratio)^(1/(a-1)) ) / ( 1+pratio * (b^t0 * d^k * pratio)^(1/(a-1)) )
+```
+
+EXPAND DATASET TO 1 OBSERVATION PER BUDGETxINDIVIDUAL, MERGE IN INSTRUMENT DETAILS
+```{r data setup}
+mcbt_data_ <- utils::read.table(file.path(data_dir_base, 'mCTB_kit/data.txt'), 
+                         header = TRUE, 
+                         na.strings = '.')
+
+mcbt_data_l <- stats::reshape(mcbt_data_, 
+                              varying = paste0('c', 1:24),
+                              v.names = 'c',
+                              timevar = 'budget_number',
+                              times = 1:24, 
+                              direction = 'long')
+
+mcbt_design <- read.table(file.path(data_dir_base, 'mCTB_kit/instrument_details.txt'),
+                     header = TRUE)
+
+mcbt_data <- merge(mcbt_data_l, mcbt_design, 
+                   by = 'budget_number', 
+                   all.x = TRUE, all.y = TRUE)
+```
+
+```{r missing, fig.width = 4, fig.height= 3}
+n_missing_responses <- dplyr::summarize(group_by(mcbt_data, subject_id),
+                                        n_missing = sum(is.na(c)),
+                                        p_missing = n_missing/n())
+plot(n_missing_responses$subject_id, n_missing_responses$p_missing, 
+     type = 'h', xlab = 'Participant ID', ylab = 'Proportion missing responses',
+     ylim = c(0,1))
+
+knitr::kable(filter(n_missing_responses, p_missing > 0),
+             digits = 2,
+             caption = paste0('Proportion missing by participant. Total N with missing data = ',
+                              sum(n_missing_responses$p_missing > 0)))
+```
+
+CREATE CHOICESET VARIABLES
+```{r choiset variable creation}
+mcbt_data$t0 <- as.numeric(mcbt_data$sooner_date_weeks == 0)
+mcbt_data$k <- 7 * mcbt_data$delay_weeks
+mcbt_data$pratio <- mcbt_data$endowment_later / mcbt_data$endowment_soon
+```
+
+DEFINE VALUES FOR EACH OPTION
+```{r value definition}
+for(j in 1:6){
+  mcbt_data[paste0('soon_', j)] <- (20/as.vector(mcbt_data$pratio)) - (j-1) * (20/as.vector(mcbt_data$pratio)) / 5
+  mcbt_data[paste0('late_', j)] <- (j-1) * 4
+}
+
+mcbt_data$soon_6 <- 0
+```
+
+ASSOCIATE CHOICE OPTIONS WITH VALUES
+```{r choice association}
+#Create a new variable with a value that corresponds to the response option
+#chose in `mcbt_data$c`
+mcbt_data$sooner_choice <- apply(
+  mcbt_data, 1, #for every row in mcbt_data
+  function(a_row){ 
+    #write the name of the column to get the choice value from
+    choice_col <- paste0('soon_', a_row['c']) 
+    #get the choice value
+    sc <- a_row[choice_col] 
+    #if it's null, return NA, otherwise return the choice value
+    return( ifelse(is.null(sc), NA, sc)) 
+  })
+```
+
+
+USE NON-LINEAR LEAST SQUARES TO ESTIMATE AGGREGATE PARAMETERS OF BETA-DELTA, CRRA, TIME-SEPARABLE UTILITY
+```{r non-linear least squares aggregate parameter estimation one}
+sd_of_soonerchoice <- sd(mcbt_data$sooner_choice, na.rm = TRUE)
+
+#scale the outcome
+mcbt_data$sooner_choice_scaled <- mcbt_data$sooner_choice / sd_of_soonerchoice
+mcbt_data$endowment_later_scaled <- mcbt_data$endowment_later / sd_of_soonerchoice
+
+a_start <- 0.90
+b_start <- 1
+d_start <- 0.999
+
+nls_ctb_model <- nls(sooner_choice ~ 
+                       ( endowment_later * (b^t0 * d^k * pratio)^(1/(a-1)) ) / 
+                       ( 1+pratio * (b^t0 * d^k * pratio)^(1/(a-1)) ),
+          mcbt_data, 
+          start = list(a = a_start, 
+                       b = b_start, 
+                       d = d_start))
+
+summary(nls_ctb_model, digits=4)
+
+##STORE MODEL PARAMS##
+mcbt_data$alpha_nls <- summary(nls_ctb_model)$coefficients[1]
+mcbt_data$beta_nls <- summary(nls_ctb_model)$coefficients[2]
+mcbt_data$delta_nls <- summary(nls_ctb_model)$coefficients[3]
+```
+
