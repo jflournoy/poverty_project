@@ -10,6 +10,46 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(nlme)
 data_dir_base <- '/home/jflournoy/code_new/poverty_project/JRPpaper/'
+
+plot_mctb_responses <- function(slice_of_data, adj.pratio = TRUE){
+  slice_of_data$pratio_group <- factor(
+    case_when(slice_of_data$pratio > 1.2 ~ 1,
+              slice_of_data$pratio > 1 ~ 2,
+              slice_of_data$pratio == 1 ~ 3),
+    levels = c(1, 2, 3), 
+    labels = c('High', 'Low', 'No ratio'))
+  
+  if(adj.pratio){
+    slice_of_data$sooner_choice_for_plot <- 
+      slice_of_data$sooner_choice*slice_of_data$pratio
+  } else {
+    slice_of_data$sooner_choice_for_plot <- 
+      slice_of_data$sooner_choice
+  }
+  
+  aplot <- ggplot(slice_of_data, 
+         aes(x = (k - sooner_date_weeks*7)/7, 
+             y = sooner_choice_for_plot,
+             alpha = pratio)) + 
+    geom_line(stat = 'smooth', method = 'lm', color = '#555555',
+              aes(group = pratio_group,
+                  linetype = pratio_group)) + 
+    geom_point(position = position_jitter(width = .075, height = .01),
+               size = 2) + 
+    scale_alpha_continuous(range = c(.25, 1)) + 
+    facet_grid(factor(t0)~subject_id, 
+               labeller = labeller(
+                 subject_id = label_value,
+                 `factor(t0)` = as_labeller(c(`0` = 'Sooner: in 5 weeks', 
+                                              `1` = 'Sooner: today')))) + 
+    labs(x = 'Number of weeks delay', y = 'Sooner choice amount', 
+         alpha = 'Price ratio', linetype = 'Price ratio bin') + 
+    coord_cartesian(x = c(3, 12), y = c(-10, 30)) + 
+    scale_x_continuous(breaks = c(5,9)) + 
+    scale_y_continuous(breaks = c(0, 10, 20)) + 
+    NULL
+  return(aplot)
+}
 ```
 
 We will fit a multi-level non-linear (on the parameters) regression model to the data from the sample. The regression takes the form: 
@@ -28,31 +68,31 @@ sooner_choice ~ ( endowment_later * (b^t0 * d^k * pratio)^(1/(a-1)) ) / ( 1+prat
 We start by importing the data and ensuring that it contains all of the information for each trial we need. For example, we need to add columns that specify the delay period for each trial.
 
 ```{r data setup}
-mcbt_data_ <- utils::read.table(file.path(data_dir_base, 'mCTB_kit/data.txt'), 
+mctb_data_ <- utils::read.table(file.path(data_dir_base, 'mCTB_kit/data.txt'), 
                          header = TRUE, 
                          na.strings = '.')
 
-mcbt_data_l <- stats::reshape(mcbt_data_, 
+mctb_data_l <- stats::reshape(mctb_data_, 
                               varying = paste0('c', 1:24),
                               v.names = 'c',
                               timevar = 'budget_number',
                               times = 1:24, 
                               direction = 'long')
 
-mcbt_design <- read.table(file.path(data_dir_base, 'mCTB_kit/instrument_details.txt'),
+mctb_design <- read.table(file.path(data_dir_base, 'mCTB_kit/instrument_details.txt'),
                      header = TRUE)
 
-mcbt_data <- merge(mcbt_data_l, mcbt_design, 
+mctb_data <- merge(mctb_data_l, mctb_design, 
                    by = 'budget_number', 
                    all.x = TRUE, all.y = TRUE)
 
-head(mcbt_data)
+head(mctb_data)
 ```
 
 We will also take this opportunity to examine missing reponses.
 
 ```{r missing, fig.width = 4, fig.height= 3}
-n_missing_responses <- dplyr::summarize(group_by(mcbt_data, subject_id),
+n_missing_responses <- dplyr::summarize(group_by(mctb_data, subject_id),
                                         n_missing = sum(is.na(c)),
                                         p_missing = n_missing/n())
 plot(n_missing_responses$subject_id, n_missing_responses$p_missing, 
@@ -68,29 +108,30 @@ knitr::kable(filter(n_missing_responses, p_missing > 0),
 Here, we define some trial-level predictors. t0 defines whether the soonest choice is today or also in the future. We modify k so that it is in terms of days, rather than weeks. We also calculate the price ratio, which is just the ratio of the later reward and sooner reward.
 
 ```{r choiset variable creation}
-mcbt_data$t0 <- as.numeric(mcbt_data$sooner_date_weeks == 0)
-mcbt_data$k <- 7 * mcbt_data$delay_weeks
-mcbt_data$pratio <- mcbt_data$endowment_later / mcbt_data$endowment_soon
+mctb_data$t0 <- as.numeric(mctb_data$sooner_date_weeks == 0)
+mctb_data$k <- 7 * mctb_data$delay_weeks
+mctb_data$k_w <- mctb_data$delay_weeks
+mctb_data$pratio <- mctb_data$endowment_later / mctb_data$endowment_soon
 ```
 
 Here we calculate the possible value choices the participant saw for each trial.
 
 ```{r value definition}
 for(j in 1:6){
-  mcbt_data[paste0('soon_', j)] <- (20/as.vector(mcbt_data$pratio)) - (j-1) * (20/as.vector(mcbt_data$pratio)) / 5
-  mcbt_data[paste0('late_', j)] <- (j-1) * 4
+  mctb_data[paste0('soon_', j)] <- (20/as.vector(mctb_data$pratio)) - (j-1) * (20/as.vector(mctb_data$pratio)) / 5
+  mctb_data[paste0('late_', j)] <- (j-1) * 4
 }
 
-mcbt_data$soon_6 <- 0
+mctb_data$soon_6 <- 0
 ```
 
 Finally, based on the particpant's response, 1-6, we create a column that contains the amount of money they choose to receive at the soonest possible time. If they choose option 6, to receive the full \$20 at the later time, they always receive \$0 at the sooner time.
 
 ```{r choice association}
 #Create a new variable with a value that corresponds to the response option
-#chose in `mcbt_data$c`
-mcbt_data$sooner_choice <- apply(
-  mcbt_data, 1, #for every row in mcbt_data
+#chose in `mctb_data$c`
+mctb_data$sooner_choice <- apply(
+  mctb_data, 1, #for every row in mctb_data
   function(a_row){ 
     #write the name of the column to get the choice value from
     choice_col <- paste0('soon_', a_row['c']) 
@@ -118,7 +159,7 @@ missing_ids <- full_join(filter(n_missing_responses, n_missing > 0),
                          scale_data_missing,
                          by = c('subject_id' = 'subID'))
 
-mcbt_data <- anti_join(mcbt_data, missing_ids,
+mctb_data <- anti_join(mctb_data, missing_ids,
                        by = 'subject_id')
 ```
 
@@ -127,11 +168,11 @@ Total number of excluded IDs is `r dim(missing_ids)[1]`, or `r round(dim(missing
 We use fixed-effects non-linear least-squares as a first pass on the data and to set starting values for the individual-level analyses that will assist the multi-level estimation.
 
 ```{r non-linear least squares aggregate parameter estimation one}
-sd_of_soonerchoice <- sd(mcbt_data$sooner_choice, na.rm = TRUE)
+sd_of_soonerchoice <- sd(mctb_data$sooner_choice, na.rm = TRUE)
 
 #scale the outcome
-mcbt_data$sooner_choice_scaled <- mcbt_data$sooner_choice / sd_of_soonerchoice
-mcbt_data$endowment_later_scaled <- mcbt_data$endowment_later / sd_of_soonerchoice
+mctb_data$sooner_choice_scaled <- mctb_data$sooner_choice / sd_of_soonerchoice
+mctb_data$endowment_later_scaled <- mctb_data$endowment_later / sd_of_soonerchoice
 
 a_start <- 0.90
 b_start <- 1
@@ -140,7 +181,7 @@ d_start <- 0.999
 nls_ctb_model <- nls(sooner_choice ~ 
                        ( endowment_later * (b^t0 * d^k * pratio)^(1/(a-1)) ) / 
                        ( 1+pratio * (b^t0 * d^k * pratio)^(1/(a-1)) ),
-          mcbt_data, 
+          mctb_data, 
           start = list(a = a_start, 
                        b = b_start, 
                        d = d_start))
@@ -151,9 +192,9 @@ knitr::kable(broom::tidy(nls_ctb_model), digits = 4)
 alpha_nls <- summary(nls_ctb_model)$coefficients[1]
 beta_nls<- summary(nls_ctb_model)$coefficients[2]
 delta_nls <- summary(nls_ctb_model)$coefficients[3] 
-mcbt_data$alpha_nls <- alpha_nls
-mcbt_data$beta_nls <- beta_nls
-mcbt_data$delta_nls <- delta_nls
+mctb_data$alpha_nls <- alpha_nls
+mctb_data$beta_nls <- beta_nls
+mctb_data$delta_nls <- delta_nls
 ```
 
 We can interpret these values as follows: $a$ is considerably less than 1, indicating overall risk-aversion. In other words, people are willing to pay a cost, with the delay held equal, just for getting money sooner rather than waiting. The parameter $b < 1$ indicates people discount even a bit more by a factor of $b = `r round(beta_nls,4)`$ if they can get the sooner reward today, rather than waiting five weeks. In other words, for a constant delay of 5 weeks, they discount at a rate $d=`r round(delta_nls,4)`$ per day multiplied by $`r round(beta_nls,4)`$ if they get the sooner reward today (the sooner discount for a five week delay is $`r round(delta_nls,4)`^{5\times7} = `r round(delta_nls^(5*7),4)`$, but if the sooner reward is today, it's $`r round(beta_nls,4)` \times `r round(delta_nls,4)`^{5\times7} = `r round(beta_nls*delta_nls^(5*7),4)`$).
@@ -179,111 +220,186 @@ Another way of expressing the discounting variable is in terms of a monthly disc
 
 # Individual-level parameters
 
+Find the cases that have no meaningful variability in their responses. We exclude trials where you could receive \$20 sooner or \$20 later.
+
 ```{r}
-mcbt_nls_models <- lapply(
-  unique(mcbt_data$subject_id), 
-  function(an_id){
-    amod <- try(nls(
-      sooner_choice ~ 
-        ( endowment_later * (b^t0 * d^k * pratio)^(1/(a-1)) ) / 
-        ( 1+pratio * (b^t0 * d^k * pratio)^(1/(a-1)) ),
-      data = mcbt_data[mcbt_data$subject_id == an_id,], 
-      start = list(a = alpha_nls,
-                   b = beta_nls, 
-                   d = delta_nls),
-      algorithm = 'port',
-      lower = c(a=0, b = 0, d = 0),
-      upper = c(a = 1, b = 2, d = 2),
-      control = list(maxiter = 5000, minFactor = 1/2^30)))
-    
-    if(inherits(amod, what = 'try-error')){
-      retval <- data_frame(
-        subject_id = an_id,
-        error = attr(amod, 
-                     which = "condition")$message)
-    } else {
-      retval <- data_frame(
-        subject_id = an_id,
-        alpha_ind = summary(amod)$coefficients[1],
-        beta_ind = summary(amod)$coefficients[2],
-        delta_ind = summary(amod)$coefficients[3],
-        error = NA
-      )
-    }
-    return(retval)
-  })
+odd_cases <- group_by(mctb_data, subject_id) %>%
+  filter(soon_1 != late_6) %>%
+  summarize(
+    no_interior = case_when(
+      any(c %in% 2:5) ~ FALSE,
+      all(c %in% c(1,6)) ~ TRUE,
+      TRUE ~ NA
+    ),
+    no_variance = case_when(
+      all(c == 1) ~ TRUE,
+      all(c == 6) ~ TRUE,
+      TRUE ~ FALSE
+    ))
 
-mcbt_nls_models_df <- bind_rows(mcbt_nls_models)
-sum(!is.na(mcbt_nls_models_df$error))
+print(paste0('All cases that have no variance also have no interior solutions: ', 
+             all(odd_cases$no_interior[odd_cases$no_variance])))
 
-mcbt_nls_models_df$nls_mods = 1
+#View(odd_cases)
 
-mcbt_nlslist <- nlsList(
-  sooner_choice ~ 
-    ( endowment_later * (b^t0 * d^k * pratio)^(1/(a-1)) ) / 
-    ( 1+pratio * (b^t0 * d^k * pratio)^(1/(a-1)) ) | subject_id, 
-  data = select(mcbt_data, t0, k, pratio, subject_id, 
-                sooner_choice, endowment_later), 
+table(odd_cases[,2:3])
+```
+
+This indicates that 345 participants always answer either sooner or later exclusively (excluding the \$20 now versus \$20 later trials). 533 participants use the interior options, and 201 participants just switch between taking everything sooner, or everything later.
+
+```{r message = F, warning = F, error = F}
+mctb_form_char <- 'sooner_choice_scaled ~ 
+    ( endowment_later_scaled * (b^t0 * d^k_w * pratio)^(1/(a-1)) ) / 
+    ( 1+pratio * (b^t0 * d^k_w * pratio)^(1/(a-1)) )'
+
+mctb_nlslist <- nlsList(
+  sooner_choice_scaled ~ 
+    ( endowment_later_scaled * (b^t0 * d^k_w * pratio)^(1/(a-1)) ) / 
+    ( 1+pratio * (b^t0 * d^k_w * pratio)^(1/(a-1)) ) | subject_id, 
+  data = select(mctb_data,
+                t0, k_w, pratio, subject_id,
+                sooner_choice_scaled, endowment_later_scaled), 
   start = c(a=alpha_nls,b=beta_nls, d=delta_nls),
-  control = list(maxiter = 5000, minFactor = 1/2^30),
-  warn.nls = TRUE)
+  control = list(maxiter = 5000, minFactor = 1/2^30, tol = 1e-1))
 
-converged <- lapply(mcbt_nlslist,
+converged <- lapply(mctb_nlslist,
                     function(amod) !is.null(amod))
 
-adf <- data_frame(subject_id = as.numeric(names(converged)), 
-                  converged = unlist(converged),
+converged_df <- data_frame(subject_id = as.numeric(names(converged)), 
+                  nlslist_converged = unlist(converged),
                   nlslist = 1)
-
-athing <- full_join(select(filter(mcbt_nls_models_df,!is.na(error)),
-                           subject_id, nls_mods),
-                    select(filter(adf, !converged), -converged))
-table(athing[,c('nls_mods', 'nlslist')], useNA = 'ifany')
 ```
 
 
-## Plotting all the choices
 
-Before moving into the estimation of individual-level parameters, let's plot some of the data.
+```{r fig.width=10, fig.height=4}
+ggplot2::theme_set(ggplot2::theme_minimal())
+plot_mctb_responses(
+  filter(mctb_data, subject_id %in% 
+           c(converged_df$subject_id[converged_df$converged][1:3],
+             converged_df$subject_id[!converged_df$converged][1:3])),
+  adj.pratio = TRUE)
+```
+
+```{r}
+mctb_nlme.nlslist <- nlme.nlsList(model = mctb_nlslist,
+                                  random = b + d ~ 1,
+                                  groups = ~subject_id,
+                                  method = 'ML')
+summary(mctb_nlme.nlslist)
+```
+
+```{r}
+qplot(sample = residuals(mctb_nlme.nlslist)/sd(residuals(mctb_nlme.nlslist)), 
+      geom = c('qq', 'abline'), 
+      main = "Q-Q plot for conditional residuals")
+
+qplot(sample = ranef(mctb_nlme.nlslist)$b/sd(ranef(mctb_nlme.nlslist)$b), 
+      geom = c('qq', 'abline'), 
+      main = "Q-Q plot for  random b")
+
+qplot(sample = ranef(mctb_nlme.nlslist)$d/sd(ranef(mctb_nlme.nlslist)$d), 
+      geom = c('qq', 'abline'), 
+      main = "Q-Q plot for  random d")
+
+qplot(x = predict(mctb_nlme.nlslist), y = residuals(mctb_nlme.nlslist),
+      geom = c('jitter', 'smooth'), width = .05, height = .05)
+
+qplot(x = predict(mctb_nlme.nlslist), y = sqrt(abs(scale(residuals(mctb_nlme.nlslist)))),
+      geom = c('jitter', 'smooth'), width = .05, height = .05)
+plot(mctb_nlme.nlslist, subject_id ~ resid(.))
+```
+
+
+```{r fig.width=20, fig.height=40, eval = FALSE}
+plot(mctb_nlme.nlslist, sooner_choice_scaled ~ fitted(.) | subject_id)
+```
+
+```{r}
+mctb_data_diagnostics <- left_join(
+  left_join(mctb_data, odd_cases,
+            by = 'subject_id'),
+  converged_df[,-3],
+  by = 'subject_id')
+
+mctb_nlme.nlslist_coef_df <- as.data.frame(coef(mctb_nlme.nlslist))
+mctb_nlme.nlslist_coef_df$subject_id <- as.numeric(rownames(mctb_nlme.nlslist_coef_df))
+
+mctb_data_model_info <- left_join(mctb_data_diagnostics,
+                                  mctb_nlme.nlslist_coef_df,
+                                  by = 'subject_id')
+```
+
+```{r}
+for(avar in list(list('b', .05), list('d', .005))) {
+  print(ggplot(distinct(mctb_data_model_info, 
+                  a, b, d, no_interior, no_variance, nlslist_converged),
+         aes_string(x = avar[[1]], 
+             group = 'nlslist_converged',
+             fill = 'nlslist_converged')) + 
+    geom_vline(xintercept = 1) +
+    geom_histogram(position = position_dodge(),
+                   aes(y = ..count..),
+                   binwidth = avar[[2]]) + 
+    facet_grid(no_interior ~ no_variance,
+               labeller = labeller(
+                 no_interior = as_labeller(c('TRUE' = 'No interior choices',
+                                             'FALSE' = 'Has interior choices')),
+                 no_variance = as_labeller(c('TRUE' = 'No choice variance',
+                                             'FALSE' = 'Has choice variance'))),
+               as.table = TRUE) + 
+      labs(x = paste0('Parameter ', avar[[1]]),
+           fill = 'Single-subject\nNLS model\nconverged?')) 
+}
+```
+
+Participants who have very low d values:
+
+```{r eval = F}
+plot_small_d_df <- filter(mctb_data_model_info, d < .94)
+plot_mctb_responses()
+```
+
+```{r}
+library(brms)
+library(future)
+plan(multiprocess)
+brms_formula <- as.formula(mctb_form_char)
+
+mctb_priors <- c(set_prior('normal(1, .4)', nlpar = 'a', lb = 0, ub = 1),
+                 set_prior('normal(1, .4)', nlpar = 'b', lb = 0, ub = 2),
+                 set_prior('normal(1, .4)', nlpar = 'd', lb = 0, ub = 2))
+
+mctb_brm_f <- future(brm(bf(brms_formula, 
+                            a + b + d ~ 1 + (1 | subject_id),
+                            nl = TRUE),
+                         data = mctb_data,
+                         prior = mctb_priors,
+                         chains = 7, cores = 7,
+                         iter = 1500, warmup = 1000,
+                         save_dso = T, 
+                         save_model = 'mctb_brm.stan'))
+resolved(mctb_brm_f)
+
+```
+
+
+
+## Plotting all the choices
 
 ```{r fig.height=3, fig.width=8, eval = FALSE}
 set.seed(2134123)
 theme_set(theme_minimal())
 
-mcbt_sample_ids <- distinct(mcbt_data, subject_id) %>%
+mctb_sample_ids <- distinct(mctb_data, subject_id) %>%
   mutate(plot_group = (1:n()-1) %/% 5)
 
-for(g in 1:max(mcbt_sample_ids$plot_group)){
-  mcbt_data_sample <- left_join(
-    filter(mcbt_sample_ids, plot_group == g),
-           mcbt_data, by = 'subject_id')
+for(g in 0:max(mctb_sample_ids$plot_group)){
+  mctb_data_sample <- left_join(
+    filter(mctb_sample_ids, plot_group == g),
+           mctb_data, by = 'subject_id')
   
-  mcbt_data_sample$pratio_group <- factor(
-    case_when(mcbt_data_sample$pratio > 1.2 ~ 1,
-              mcbt_data_sample$pratio > 1 ~ 2,
-              mcbt_data_sample$pratio == 1 ~ 3),
-    levels = c(1, 2, 3), 
-    labels = c('High', 'Low', 'No ratio'))
-  
-  aplot <- ggplot(mcbt_data_sample, 
-         aes(x = (k - sooner_date_weeks*7)/7, y = sooner_choice,
-             alpha = pratio)) + 
-    geom_line(stat = 'smooth', method = 'lm', color = '#555555',
-              aes(group = pratio_group,
-                  linetype = pratio_group)) + 
-    geom_point(position = position_jitter(width = .075, height = 1),
-               size = 2) + 
-    scale_alpha_continuous(range = c(.25, 1)) + 
-    facet_grid(factor(t0)~subject_id, 
-               labeller = labeller(
-                 subject_id = label_value,
-                 `factor(t0)` = as_labeller(c(`0` = 'Sooner: in 5 weeks', 
-                                              `1` = 'Sooner: today')))) + 
-    labs(x = 'Number of weeks delay', y = 'Sooner choice amount', 
-         alpha = 'Price ratio', linetype = 'Price ratio bin') + 
-    coord_cartesian(x = c(3, 12), y = c(-10, 30)) + 
-    scale_x_continuous(breaks = c(5,9)) + 
-    scale_y_continuous(breaks = c(0, 10, 20))
+  aplot <- plot_mctb_responses(mctb_data_sample)
   print(aplot)
 }
 ```
