@@ -50,6 +50,30 @@ plot_mctb_responses <- function(slice_of_data, adj.pratio = TRUE){
     NULL
   return(aplot)
 }
+
+CachedFit <- function(expr, rds_filename, save_only = F){
+  if(file.exists(rds_filename) && !save_only){
+    message('Loading...')
+    theFit <- readRDS(rds_filename)
+  } else if(file.exists(rds_filename) && save_only){
+      message('save_only is TRUE but file already exists (returning NULL)')
+      return(NULL)
+  } else {
+    message('Evaluating... (save_only = ', save_only, ')')
+    theFit <- try(eval(expr))
+    message('Writing result to ', rds_filename)
+    saveRDS(theFit, rds_filename)
+  }
+  if(save_only){
+      if(any('try-error' %in% class(theFit))){
+          return(theFit)
+      } else {
+          return(TRUE)
+      }
+  } else {
+      return(theFit)
+  }
+}
 ```
 
 We will fit a multi-level non-linear (on the parameters) regression model to the data from the sample. The regression takes the form: 
@@ -331,9 +355,26 @@ mctb_data_model_info <- left_join(mctb_data_diagnostics,
 ```
 
 ```{r}
+mctb_pars_and_flags <- distinct(mctb_data_model_info, 
+                  a, b, d, 
+                  no_interior, no_variance, nlslist_converged,
+                  subject_id)
+
+flag_summaries <- group_by(mctb_pars_and_flags,
+                           no_interior, no_variance) %>%
+  summarize(a = mean(a, na.rm = T),
+            b = mean(b, na.rm = T),
+            d = mean(d, na.rm = T),
+            n = n())
+
+knitr::kable(bind_rows(flag_summaries,
+                       as.data.frame(t(fixef(mctb_nlme.nlslist)))), digits = 4)
+```
+
+
+```{r}
 for(avar in list(list('b', .05), list('d', .005))) {
-  print(ggplot(distinct(mctb_data_model_info, 
-                  a, b, d, no_interior, no_variance, nlslist_converged),
+  print(ggplot(mctb_pars_and_flags,
          aes_string(x = avar[[1]], 
              group = 'nlslist_converged',
              fill = 'nlslist_converged')) + 
@@ -349,38 +390,55 @@ for(avar in list(list('b', .05), list('d', .005))) {
                                              'FALSE' = 'Has choice variance'))),
                as.table = TRUE) + 
       labs(x = paste0('Parameter ', avar[[1]]),
-           fill = 'Single-subject\nNLS model\nconverged?')) 
+           fill = 'Single-subject\nNLS model\nconverged?') + 
+      theme_minimal())
 }
 ```
 
 Participants who have very low d values:
 
 ```{r eval = F}
-plot_small_d_df <- filter(mctb_data_model_info, d < .94)
-plot_mctb_responses()
+plot_small_d_sids <- unlist(distinct(filter(mctb_data_model_info, 
+                                          d < .94, !no_variance),
+                                   subject_id))
+for(i in unique((1:23 -1) %/% 6)){
+  last_index <- ifelse(i*6 < length(plot_small_d_sids),
+                       (i+1)*6,
+                       length(plot_small_d_sids))
+  first_index <- i*6 + 1
+  print(plot_mctb_responses(filter(
+    mctb_data_model_info, 
+    subject_id %in% plot_small_d_sids[first_index:last_index]))
+    +theme_minimal())
+}
 ```
 
 ```{r}
-library(brms)
 library(future)
 plan(multiprocess)
-brms_formula <- as.formula(mctb_form_char)
+mctb_brm_f <- future({
+  library(brms)
 
-mctb_priors <- c(set_prior('normal(1, .4)', nlpar = 'a', lb = 0, ub = 1),
-                 set_prior('normal(1, .4)', nlpar = 'b', lb = 0, ub = 2),
-                 set_prior('normal(1, .4)', nlpar = 'd', lb = 0, ub = 2))
+  brms_formula <- as.formula(mctb_form_char)
+  
+  mctb_priors <- c(set_prior('normal(1, .4)', nlpar = 'a', lb = 0, ub = 1),
+                   set_prior('normal(1, .4)', nlpar = 'b', lb = 0, ub = 2),
+                   set_prior('normal(1, .4)', nlpar = 'd', lb = 0, ub = 2))
+  
+  mctb_brm <- CachedFit({brm(bf(brms_formula, 
+                                a + b + d ~ 1 + (1 | subject_id),
+                                nl = TRUE),
+                             data = mctb_data,
+                             prior = mctb_priors,
+                             chains = 7, cores = 7,
+                             iter = 1500, warmup = 1000,
+                             save_dso = T, 
+                             save_model = 'mctb_brm.stan')}, 
+                        rds_filename = file.path(data_dir_base, 
+                                                 'Analyses/brms_model.RDS'))
+})
 
-mctb_brm_f <- future(brm(bf(brms_formula, 
-                            a + b + d ~ 1 + (1 | subject_id),
-                            nl = TRUE),
-                         data = mctb_data,
-                         prior = mctb_priors,
-                         chains = 7, cores = 7,
-                         iter = 1500, warmup = 1000,
-                         save_dso = T, 
-                         save_model = 'mctb_brm.stan'))
 resolved(mctb_brm_f)
-
 ```
 
 
