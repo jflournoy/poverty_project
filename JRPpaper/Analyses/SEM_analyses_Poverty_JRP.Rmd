@@ -1,0 +1,76 @@
+---
+title: "SEM_Analyses_Poverty_JRP"
+author: "Rita M Ludwig"
+date: "10/29/2018"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lavaan)
+library(semPlot)
+```
+
+```{r data import, include=FALSE}
+scales_INR=read.csv("/Users/rx/Documents/Research/Poverty/poverty_project/JRPpaper/Data/dataforanalysis_JRP_poverty.csv")
+ddparams=read.csv("/Users/rx/Documents/Research/Poverty/poverty_project/JRPpaper/Data/mctb_model_parameters.csv")
+data=full_join(scales_INR,ddparams, by="subID")
+missing=anti_join(scales_INR,ddparams, by="subID")
+```
+1.) The hypothesis about the relation of SES to the relative value of immediate gains will be tested with the significance test on the covariance between beta and INR. Delta, planfulness, Conscientiousness, and Impulsivity scale scores will be included in the model as covariates. We expect smaller beta values to be associated with lower INR.
+
+```{r model 1}
+hypo1 ='
+  Planfulness =~ P_Q3RTP + P_Q1TP + P_Q7TP + P_Q11RTP + P_Q14TP + P_Q20RTP + P_Q23TP + P_QR25TP +  P_Q28TP +  P_Q30RTP + P_Q2RCS +  P_Q4RCS + P_Q5CS +  P_Q8CS +  P_Q12RCS +  P_Q15CS +	P_Q17CS +	P_Q18RCS + P_Q21RCS +	P_Q26CS + P_Q6RMF +  P_Q9MF +	P_Q10RMF +	P_Q13RMF +	P_Q16MF +	P_Q19MF +	P_Q22RMF +	P_Q24MF +	P_Q27MF +	P_Q29RMF
+  BIS =~ BIS1 +	BIS2 +	BIS3 + BIS4 +	BIS5 +	BIS6 +	BIS7 +	BIS8 +	BIS9 +	BIS10 +	BIS11 +	BIS12 +	BIS13 +	BIS14 +	   BIS15 +	BIS16 +	BIS17 +	BIS18 +	BIS19 +	BIS20 +	BIS21 +	BIS22 +	BIS23 +	BIS24 +	BIS25 +	BIS26 +	BIS27 +	BIS28 +	      BIS29 +	BIS30
+  Consci =~ BFI3 + BFI13 + BFI28 + BFI33 + BFI38 + BFI8 + BFI18 + BFI23 + BFI43
+  Planfulness ~~ 0*BIS
+  Planfulness ~~ 0*Consci
+  BIS ~~ 0*Consci
+  b ~ d + Planfulness + Consci + BIS
+  INR ~ d + Planfulness + Consci + BIS
+  b ~~ INR
+'
+hypo1.fit = cfa(hypo1, data = data)  
+summary(hypo1.fit)
+semPaths(hypo1.fit, style="LISREL")
+
+```
+2.) The hypothesis about the relation of SES to the value of long-term gains will be tested with the significance test on the covariance between delta and INR. Planfulness, Conscientiousness, and Impulsivity scale scores will be included in the model as covariates. We expect smaller delta values to be associated with lower INR.
+
+```{r model 2}
+hypo2 ='
+  Planfulness =~ P_Q3RTP + P_Q1TP + P_Q7TP + P_Q11RTP + P_Q14TP + P_Q20RTP + P_Q23TP + P_QR25TP +  P_Q28TP +  P_Q30RTP + P_Q2RCS +  P_Q4RCS + P_Q5CS +  P_Q8CS +  P_Q12RCS +  P_Q15CS +	P_Q17CS +	P_Q18RCS + P_Q21RCS +	P_Q26CS + P_Q6RMF +  P_Q9MF +	P_Q10RMF +	P_Q13RMF +	P_Q16MF +	P_Q19MF +	P_Q22RMF +	P_Q24MF +	P_Q27MF +	P_Q29RMF
+  BIS =~ BIS1 +	BIS2 +	BIS3 + BIS4 +	BIS5 +	BIS6 +	BIS7 +	BIS8 +	BIS9 +	BIS10 +	BIS11 +	BIS12 +	BIS13 +	BIS14 +	   BIS15 +	BIS16 +	BIS17 +	BIS18 +	BIS19 +	BIS20 +	BIS21 +	BIS22 +	BIS23 +	BIS24 +	BIS25 +	BIS26 +	BIS27 +	BIS28 +	      BIS29 +	BIS30
+  Consci =~ BFI3 + BFI13 + BFI28 + BFI33 + BFI38 + BFI8 + BFI18 + BFI23 + BFI43
+  Planfulness ~~ 0*BIS
+  Planfulness ~~ 0*Consci
+  BIS ~~ 0*Consci
+  d ~ Planfulness + Consci + BIS
+  INR ~ Planfulness + Consci + BIS
+  d ~~ INR
+'
+hypo2.fit = cfa(hypo2, data = data)  
+summary(hypo2.fit)
+semPaths(hypo2.fit, style="LISREL")
+
+```
+3.) The hypothesis about the relation of SES to personality traits will be tested by regressing INR on Planfulness, Conscientiousness, and Impulsivity in a single regression model. We expect higher Planfulness, and Conscientiousness, and lower Impulsivity, to be associated with higher INR. 
+
+```{r model 3}
+hypo3 ='
+  Planfulness =~ P_Q3RTP + P_Q1TP + P_Q7TP + P_Q11RTP + P_Q14TP + P_Q20RTP + P_Q23TP + P_QR25TP +  P_Q28TP +  P_Q30RTP + P_Q2RCS +  P_Q4RCS + P_Q5CS +  P_Q8CS +  P_Q12RCS +  P_Q15CS +	P_Q17CS +	P_Q18RCS + P_Q21RCS +	P_Q26CS + P_Q6RMF +  P_Q9MF +	P_Q10RMF +	P_Q13RMF +	P_Q16MF +	P_Q19MF +	P_Q22RMF +	P_Q24MF +	P_Q27MF +	P_Q29RMF
+  BIS =~ BIS1 +	BIS2 +	BIS3 + BIS4 +	BIS5 +	BIS6 +	BIS7 +	BIS8 +	BIS9 +	BIS10 +	BIS11 +	BIS12 +	BIS13 +	BIS14 +	   BIS15 +	BIS16 +	BIS17 +	BIS18 +	BIS19 +	BIS20 +	BIS21 +	BIS22 +	BIS23 +	BIS24 +	BIS25 +	BIS26 +	BIS27 +	BIS28 +	      BIS29 +	BIS30
+  Consci =~ BFI3 + BFI13 + BFI28 + BFI33 + BFI38 + BFI8 + BFI18 + BFI23 + BFI43
+  Planfulness ~~ 0*BIS
+  Planfulness ~~ 0*Consci
+  BIS ~~ 0*Consci
+  INR ~ Planfulness
+  INR ~ Consci
+  INR ~ BIS
+'
+hypo3.fit = cfa(hypo3, data = data)  
+summary(hypo3.fit)
+semPaths(hypo3.fit, style="LISREL")
+
+```
