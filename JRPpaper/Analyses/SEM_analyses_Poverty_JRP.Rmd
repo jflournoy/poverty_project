@@ -9,14 +9,131 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(lavaan)
 library(semPlot)
+# proj_dir <- '/Users/rx/Documents/Research/Poverty/poverty_project'
+proj_dir <- '~/code_new/poverty_project/'
 ```
 
 ```{r data import, include=FALSE}
-scales_INR=read.csv("/Users/rx/Documents/Research/Poverty/poverty_project/JRPpaper/Data/dataforanalysis_JRP_poverty.csv")
-ddparams=read.csv("/Users/rx/Documents/Research/Poverty/poverty_project/JRPpaper/Data/mctb_model_parameters.csv")
-data=full_join(scales_INR,ddparams, by="subID")
-missing=anti_join(scales_INR,ddparams, by="subID")
+scales_INR=read.csv(file.path(proj_dir, "JRPpaper/Data/dataforanalysis_JRP_poverty.csv"))
+ddparams=read.csv(file.path(proj_dir, "JRPpaper/Data/mctb_model_parameters.csv"))
+data=full_join(scales_INR,ddparams, by=c("subID"))
+missing=anti_join(scales_INR,ddparams, by=c("subID"))
 ```
+
+Measurement invariance. 
+>Specifically, 160 people were recruited for each annual income bracket of $0-$25,000 and $26,000-$50,00; 153 people were included for the $51,000-$75,000 bracket; and 150 people were included for each income bracket of $76,000-100,000, $101,000-$150,000, $151,000-$200,000, and greater than $201,000 annually. 
+
+>We will confirm that loadings are invariant across income categories, and perform all analyses using the latent personality variables. 
+
+Bigger MFI and CFI is better, smaller RMSEA is better. MFI is our target -- we want to see no more than a .012 reduction in MFI. We can also take some info from AIC perhaps (smaller is better).
+
+First, create the income groups across which we'll test invariance:
+
+```{r}
+data$inc_group = factor(case_when(data$maxincome <= 30000 ~ 1,
+                                  data$maxincome <= 50000 ~ 2,
+                                  data$maxincome <= 70000 ~ 3,
+                                  data$maxincome <= 100000 ~ 4,
+                                  data$maxincome <= 150000 ~ 5,
+                                  data$maxincome <= 200000 ~ 6,
+                                  data$maxincome > 200000 ~ 7,
+                                  TRUE ~ NA_real_))
+
+table(data$inc_group, useNA = 'always')
+```
+
+Create the measurement models:
+
+```{r}
+plannfulness ='
+  Planfulness =~ P_Q3RTP + P_Q1TP + P_Q7TP + P_Q11RTP + P_Q14TP + P_Q20RTP + P_Q23TP + P_QR25TP +  P_Q28TP +  P_Q30RTP + P_Q2RCS +  P_Q4RCS + P_Q5CS +  P_Q8CS +  P_Q12RCS +  P_Q15CS +	P_Q17CS +	P_Q18RCS + P_Q21RCS +	P_Q26CS + P_Q6RMF +  P_Q9MF +	P_Q10RMF +	P_Q13RMF +	P_Q16MF +	P_Q19MF +	P_Q22RMF +	P_Q24MF +	P_Q27MF +	P_Q29RMF'
+bis = '
+  BIS =~ BIS1 +	BIS2 +	BIS3 + BIS4 +	BIS5 +	BIS6 +	BIS7 +	BIS8 +	BIS9 +	BIS10 +	BIS11 +	BIS12 +	BIS13 +	BIS14 +	   BIS15 +	BIS16 +	BIS17 +	BIS18 +	BIS19 +	BIS20 +	BIS21 +	BIS22 +	BIS23 +	BIS24 +	BIS25 +	BIS26 +	BIS27 +	BIS28 +	      BIS29 +	BIS30'
+consci = '
+ Consci =~ BFI3 + BFI33 + BFI8 + BFI28 + BFI13 + BFI38 + BFI18 + BFI23 + BFI43'
+```
+
+Plannfulness:
+
+```{r}
+
+fms = c('mfi', 'rmsea', 'cfi')
+
+plan_cfa_g = cfa(plannfulness, data = data, group = 'inc_group')
+plan_cfa_g_loadings = cfa(plannfulness, data = data, group = 'inc_group', group.equal = 'loadings') 
+lavTestLRT(plan_cfa_g_loadings, plan_cfa_g)
+fitmeasures(plan_cfa_g_loadings, fit.measures = fms) -
+  fitmeasures(plan_cfa_g, fit.measures = fms)
+```
+
+The MFI difference is very small.
+
+Behavioral inhibition scale:
+
+```{r}
+bis_cfa_g = cfa(bis, data = data, group = 'inc_group')
+bis_cfa_g_loadings = cfa(bis, data = data, group = 'inc_group', group.equal = 'loadings') 
+lavTestLRT(bis_cfa_g_loadings, bis_cfa_g)
+fitmeasures(bis_cfa_g_loadings, fit.measures = fms) -
+  fitmeasures(bis_cfa_g, fit.measures = fms)
+```
+
+The MFI difference is very small.
+
+Conscientiousness:
+
+```{r}
+consci_cfa_g = cfa(consci, data = data, group = 'inc_group')
+consci_cfa_g_loadings = cfa(consci, data = data, group = 'inc_group', group.equal = 'loadings') 
+lavTestLRT(consci_cfa_g_loadings, consci_cfa_g)
+fitmeasures(consci_cfa_g_loadings, fit.measures = fms) -
+  fitmeasures(consci_cfa_g, fit.measures = fms)
+```
+
+This MFI difference is really big.
+
+Check modification indices:
+
+```{r}
+consc_modind <- modificationindices(consci_cfa_g_loadings, sort = TRUE)
+consc_modind[1:20,]
+```
+
+Items 3 and 13 seem pretty problematic, though it's not their loadings that want to break free.
+
+```{r}
+hist(data$BFI3)
+hist(data$BFI13)
+```
+
+They're really skewed. Removing them from the scale entirely may fix the invariance (though it changes the scale, unfortunately). I'll start by just removing 3.
+
+```{r}
+consci_mod = '
+Consci =~ BFI13 + BFI33 + BFI8 + BFI28 + BFI38 + BFI18 + BFI23 + BFI43'
+
+consci_cfa_g_mod = cfa(consci_mod, data = data, group = 'inc_group')
+consci_cfa_g_loadings_mod = cfa(consci_mod, data = data, group = 'inc_group', group.equal = 'loadings') 
+lavTestLRT(consci_cfa_g_loadings_mod, consci_cfa_g_mod)
+fitmeasures(consci_cfa_g_loadings_mod, fit.measures = fms) -
+  fitmeasures(consci_cfa_g_mod, fit.measures = fms)
+```
+
+The MFI difference is acceptable now. So it appears we succeeded in establishing invariance. We could probably do better by removing 13 as well.
+
+```{r}
+consci_mod = '
+Consci =~ BFI33 + BFI8 + BFI28 + BFI38 + BFI18 + BFI23 + BFI43'
+
+consci_cfa_g_mod = cfa(consci_mod, data = data, group = 'inc_group')
+consci_cfa_g_loadings_mod = cfa(consci_mod, data = data, group = 'inc_group', group.equal = 'loadings') 
+lavTestLRT(consci_cfa_g_loadings_mod, consci_cfa_g_mod)
+fitmeasures(consci_cfa_g_loadings_mod, fit.measures = fms) -
+  fitmeasures(consci_cfa_g_mod, fit.measures = fms)
+```
+
+Even better. For the hypothesis tests, we will have to check the difference when we use the modified versus unmodified model.
+
 1.) The hypothesis about the relation of SES to the relative value of immediate gains will be tested with the significance test on the covariance between beta and INR. Delta, planfulness, Conscientiousness, and Impulsivity scale scores will be included in the model as covariates. We expect smaller beta values to be associated with lower INR.
 
 ```{r model 1}
@@ -34,6 +151,22 @@ hypo1 ='
 hypo1.fit = cfa(hypo1, data = data)  
 summary(hypo1.fit)
 semPaths(hypo1.fit, style="LISREL")
+
+hypo1.cmod ='
+  Planfulness =~ P_Q3RTP + P_Q1TP + P_Q7TP + P_Q11RTP + P_Q14TP + P_Q20RTP + P_Q23TP + P_QR25TP +  P_Q28TP +  P_Q30RTP + P_Q2RCS +  P_Q4RCS + P_Q5CS +  P_Q8CS +  P_Q12RCS +  P_Q15CS +	P_Q17CS +	P_Q18RCS + P_Q21RCS +	P_Q26CS + P_Q6RMF +  P_Q9MF +	P_Q10RMF +	P_Q13RMF +	P_Q16MF +	P_Q19MF +	P_Q22RMF +	P_Q24MF +	P_Q27MF +	P_Q29RMF
+  BIS =~ BIS1 +	BIS2 +	BIS3 + BIS4 +	BIS5 +	BIS6 +	BIS7 +	BIS8 +	BIS9 +	BIS10 +	BIS11 +	BIS12 +	BIS13 +	BIS14 +	   BIS15 +	BIS16 +	BIS17 +	BIS18 +	BIS19 +	BIS20 +	BIS21 +	BIS22 +	BIS23 +	BIS24 +	BIS25 +	BIS26 +	BIS27 +	BIS28 +	      BIS29 +	BIS30
+  Consci =~ BFI28 + BFI33 + BFI38 + BFI8 + BFI18 + BFI23 + BFI43
+  Planfulness ~~ 0*BIS
+  Planfulness ~~ 0*Consci
+  BIS ~~ 0*Consci
+  b ~ d + Planfulness + Consci + BIS
+  INR ~ d + Planfulness + Consci + BIS
+  b ~~ INR
+'
+
+hypo1.cmod.fit = cfa(hypo1.cmod, data = data)  
+summary(hypo1.cmod.fit)
+semPaths(hypo1.cmod.fit, style="LISREL")
 
 ```
 2.) The hypothesis about the relation of SES to the value of long-term gains will be tested with the significance test on the covariance between delta and INR. Planfulness, Conscientiousness, and Impulsivity scale scores will be included in the model as covariates. We expect smaller delta values to be associated with lower INR.
@@ -54,6 +187,20 @@ hypo2.fit = cfa(hypo2, data = data)
 summary(hypo2.fit)
 semPaths(hypo2.fit, style="LISREL")
 
+hypo2.cmod ='
+  Planfulness =~ P_Q3RTP + P_Q1TP + P_Q7TP + P_Q11RTP + P_Q14TP + P_Q20RTP + P_Q23TP + P_QR25TP +  P_Q28TP +  P_Q30RTP + P_Q2RCS +  P_Q4RCS + P_Q5CS +  P_Q8CS +  P_Q12RCS +  P_Q15CS +	P_Q17CS +	P_Q18RCS + P_Q21RCS +	P_Q26CS + P_Q6RMF +  P_Q9MF +	P_Q10RMF +	P_Q13RMF +	P_Q16MF +	P_Q19MF +	P_Q22RMF +	P_Q24MF +	P_Q27MF +	P_Q29RMF
+  BIS =~ BIS1 +	BIS2 +	BIS3 + BIS4 +	BIS5 +	BIS6 +	BIS7 +	BIS8 +	BIS9 +	BIS10 +	BIS11 +	BIS12 +	BIS13 +	BIS14 +	   BIS15 +	BIS16 +	BIS17 +	BIS18 +	BIS19 +	BIS20 +	BIS21 +	BIS22 +	BIS23 +	BIS24 +	BIS25 +	BIS26 +	BIS27 +	BIS28 +	      BIS29 +	BIS30
+  Consci =~ BFI28 + BFI33 + BFI38 + BFI8 + BFI18 + BFI23 + BFI43
+  Planfulness ~~ 0*BIS
+  Planfulness ~~ 0*Consci
+  BIS ~~ 0*Consci
+  d ~ Planfulness + Consci + BIS
+  INR ~ Planfulness + Consci + BIS
+  d ~~ INR
+'
+hypo2.cmod.fit = cfa(hypo2.cmod, data = data)  
+summary(hypo2.cmod.fit)
+semPaths(hypo2.cmod.fit, style="LISREL")
 ```
 3.) The hypothesis about the relation of SES to personality traits will be tested by regressing INR on Planfulness, Conscientiousness, and Impulsivity in a single regression model. We expect higher Planfulness, and Conscientiousness, and lower Impulsivity, to be associated with higher INR. 
 
@@ -73,4 +220,56 @@ hypo3.fit = cfa(hypo3, data = data)
 summary(hypo3.fit)
 semPaths(hypo3.fit, style="LISREL")
 
+hypo3.cmod ='
+  Planfulness =~ P_Q3RTP + P_Q1TP + P_Q7TP + P_Q11RTP + P_Q14TP + P_Q20RTP + P_Q23TP + P_QR25TP +  P_Q28TP +  P_Q30RTP + P_Q2RCS +  P_Q4RCS + P_Q5CS +  P_Q8CS +  P_Q12RCS +  P_Q15CS +	P_Q17CS +	P_Q18RCS + P_Q21RCS +	P_Q26CS + P_Q6RMF +  P_Q9MF +	P_Q10RMF +	P_Q13RMF +	P_Q16MF +	P_Q19MF +	P_Q22RMF +	P_Q24MF +	P_Q27MF +	P_Q29RMF
+  BIS =~ BIS1 +	BIS2 +	BIS3 + BIS4 +	BIS5 +	BIS6 +	BIS7 +	BIS8 +	BIS9 +	BIS10 +	BIS11 +	BIS12 +	BIS13 +	BIS14 +	   BIS15 +	BIS16 +	BIS17 +	BIS18 +	BIS19 +	BIS20 +	BIS21 +	BIS22 +	BIS23 +	BIS24 +	BIS25 +	BIS26 +	BIS27 +	BIS28 +	      BIS29 +	BIS30
+  Consci =~ BFI3 + BFI13 + BFI28 + BFI33 + BFI38 + BFI8 + BFI18 + BFI23 + BFI43
+  Planfulness ~~ 0*BIS
+  Planfulness ~~ 0*Consci
+  BIS ~~ 0*Consci
+  INR ~ Planfulness
+  INR ~ Consci
+  INR ~ BIS
+'
+hypo3.cmod.fit = cfa(hypo3.cmod, data = data)  
+summary(hypo3.cmod.fit)
+semPaths(hypo3.cmod.fit, style="LISREL")
+```
+
+Examine simple covariance:
+
+```{r model exp1}
+exp1 ='
+  Planfulness =~ P_Q3RTP + P_Q1TP + P_Q7TP + P_Q11RTP + P_Q14TP + P_Q20RTP + P_Q23TP + P_QR25TP +  P_Q28TP +  P_Q30RTP + P_Q2RCS +  P_Q4RCS + P_Q5CS +  P_Q8CS +  P_Q12RCS +  P_Q15CS +	P_Q17CS +	P_Q18RCS + P_Q21RCS +	P_Q26CS + P_Q6RMF +  P_Q9MF +	P_Q10RMF +	P_Q13RMF +	P_Q16MF +	P_Q19MF +	P_Q22RMF +	P_Q24MF +	P_Q27MF +	P_Q29RMF
+  BIS =~ BIS1 +	BIS2 +	BIS3 + BIS4 +	BIS5 +	BIS6 +	BIS7 +	BIS8 +	BIS9 +	BIS10 +	BIS11 +	BIS12 +	BIS13 +	BIS14 +	   BIS15 +	BIS16 +	BIS17 +	BIS18 +	BIS19 +	BIS20 +	BIS21 +	BIS22 +	BIS23 +	BIS24 +	BIS25 +	BIS26 +	BIS27 +	BIS28 +	      BIS29 +	BIS30
+  Consci =~ BFI3 + BFI13 + BFI28 + BFI33 + BFI38 + BFI8 + BFI18 + BFI23 + BFI43
+  bfac =~ 1*b
+  dfac =~ 1*d
+  INRfac =~ 1*INR
+  Planfulness ~~ BIS + Consci + dfac + bfac + INRfac
+  BIS ~~ Consci + dfac + bfac + INRfac
+  Consci ~~ dfac + bfac + INRfac
+  dfac ~~ bfac + INRfac
+  bfac ~~ INRfac
+'
+exp1.fit = cfa(exp1, data = data)  
+summary(exp1.fit, stand = T)
+semPaths(exp1.fit, style="LISREL")
+
+exp1.cmod ='
+  Planfulness =~ P_Q3RTP + P_Q1TP + P_Q7TP + P_Q11RTP + P_Q14TP + P_Q20RTP + P_Q23TP + P_QR25TP +  P_Q28TP +  P_Q30RTP + P_Q2RCS +  P_Q4RCS + P_Q5CS +  P_Q8CS +  P_Q12RCS +  P_Q15CS +	P_Q17CS +	P_Q18RCS + P_Q21RCS +	P_Q26CS + P_Q6RMF +  P_Q9MF +	P_Q10RMF +	P_Q13RMF +	P_Q16MF +	P_Q19MF +	P_Q22RMF +	P_Q24MF +	P_Q27MF +	P_Q29RMF
+  BIS =~ BIS1 +	BIS2 +	BIS3 + BIS4 +	BIS5 +	BIS6 +	BIS7 +	BIS8 +	BIS9 +	BIS10 +	BIS11 +	BIS12 +	BIS13 +	BIS14 +	   BIS15 +	BIS16 +	BIS17 +	BIS18 +	BIS19 +	BIS20 +	BIS21 +	BIS22 +	BIS23 +	BIS24 +	BIS25 +	BIS26 +	BIS27 +	BIS28 +	      BIS29 +	BIS30
+  Consci =~ BFI3 + BFI13 + BFI28 + BFI33 + BFI38 + BFI8 + BFI18 + BFI23 + BFI43
+  bfac =~ 1*b
+  dfac =~ 1*d
+  INRfac =~ 1*INR
+  Planfulness ~~ BIS + Consci + dfac + bfac + INRfac
+  BIS ~~ Consci + dfac + bfac + INRfac
+  Consci ~~ dfac + bfac + INRfac
+  dfac ~~ bfac + INRfac
+  bfac ~~ INRfac
+'
+exp1.cmod.fit = cfa(exp1.cmod, data = data)  
+summary(exp1.cmod.fit, stand = T)
+semPaths(exp1.cmod.fit, style="LISREL")
 ```
