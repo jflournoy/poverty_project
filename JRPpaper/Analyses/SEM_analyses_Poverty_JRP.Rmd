@@ -9,7 +9,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(lavaan)
 library(semPlot)
-# proj_dir <- '/Users/rx/Documents/Research/Poverty/poverty_project'
+#proj_dir <- '/Users/rx/Documents/Research/Poverty/poverty_project'
 proj_dir <- '~/code_new/poverty_project/'
 ```
 
@@ -45,7 +45,7 @@ table(data$inc_group, useNA = 'always')
 Create the measurement models:
 
 ```{r}
-plannfulness ='
+planfulness ='
   Planfulness =~ P_Q3RTP + P_Q1TP + P_Q7TP + P_Q11RTP + P_Q14TP + P_Q20RTP + P_Q23TP + P_QR25TP +  P_Q28TP +  P_Q30RTP + P_Q2RCS +  P_Q4RCS + P_Q5CS +  P_Q8CS +  P_Q12RCS +  P_Q15CS +	P_Q17CS +	P_Q18RCS + P_Q21RCS +	P_Q26CS + P_Q6RMF +  P_Q9MF +	P_Q10RMF +	P_Q13RMF +	P_Q16MF +	P_Q19MF +	P_Q22RMF +	P_Q24MF +	P_Q27MF +	P_Q29RMF'
 bis = '
   BIS =~ BIS1 +	BIS2 +	BIS3 + BIS4 +	BIS5 +	BIS6 +	BIS7 +	BIS8 +	BIS9 +	BIS10 +	BIS11 +	BIS12 +	BIS13 +	BIS14 +	   BIS15 +	BIS16 +	BIS17 +	BIS18 +	BIS19 +	BIS20 +	BIS21 +	BIS22 +	BIS23 +	BIS24 +	BIS25 +	BIS26 +	BIS27 +	BIS28 +	      BIS29 +	BIS30'
@@ -53,14 +53,14 @@ consci = '
  Consci =~ BFI3 + BFI33 + BFI8 + BFI28 + BFI13 + BFI38 + BFI18 + BFI23 + BFI43'
 ```
 
-Plannfulness:
+Planfulness:
 
 ```{r}
 
 fms = c('mfi', 'rmsea', 'cfi')
 
-plan_cfa_g = cfa(plannfulness, data = data, group = 'inc_group')
-plan_cfa_g_loadings = cfa(plannfulness, data = data, group = 'inc_group', group.equal = 'loadings') 
+plan_cfa_g = cfa(planfulness, data = data, group = 'inc_group')
+plan_cfa_g_loadings = cfa(planfulness, data = data, group = 'inc_group', group.equal = 'loadings') 
 lavTestLRT(plan_cfa_g_loadings, plan_cfa_g)
 fitmeasures(plan_cfa_g_loadings, fit.measures = fms) -
   fitmeasures(plan_cfa_g, fit.measures = fms)
@@ -149,7 +149,7 @@ hypo1 ='
   b ~~ INR
 '
 hypo1.fit = cfa(hypo1, data = data)  
-summary(hypo1.fit)
+summary(hypo1.fit, fit.measures=TRUE, standardized=TRUE)
 semPaths(hypo1.fit, style="LISREL")
 
 hypo1.cmod ='
@@ -184,7 +184,7 @@ hypo2 ='
   d ~~ INR
 '
 hypo2.fit = cfa(hypo2, data = data)  
-summary(hypo2.fit)
+summary(hypo2.fit, fit.measures=TRUE, standardized=TRUE)
 semPaths(hypo2.fit, style="LISREL")
 
 hypo2.cmod ='
@@ -217,7 +217,7 @@ hypo3 ='
   INR ~ BIS
 '
 hypo3.fit = cfa(hypo3, data = data)  
-summary(hypo3.fit)
+summary(hypo3.fit, fit.measures=TRUE, standardized=TRUE)
 semPaths(hypo3.fit, style="LISREL")
 
 hypo3.cmod ='
