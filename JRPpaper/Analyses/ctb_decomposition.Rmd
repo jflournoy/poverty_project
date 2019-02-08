@@ -477,3 +477,23 @@ for(g in 0:max(mctb_sample_ids$plot_group)){
   print(aplot)
 }
 ```
+
+
+### Parameter-behavior correlation check
+
+```{r}
+behavior_summary <- group_by(mctb_data, t0, subject_id) %>%
+  summarize(sooner_choice = mean(sooner_choice)) %>%
+  gather(key, value, -subject_id, -t0) %>%
+  unite(key, key, t0) %>%
+  spread(key, value) %>%
+  mutate(mean_choice = (sooner_choice_0 + sooner_choice_1)/2,
+         diff_choice = sooner_choice_1 - sooner_choice_0)
+
+compare_df <- left_join(mctb_model_results, behavior_summary)
+
+plot(compare_df$mean_choice, compare_df$d)
+plot(compare_df$diff_choice, compare_df$b)
+```
+
+The above plots indicate a reasonable mapping of individual-level parameter values to the observed behavior.
