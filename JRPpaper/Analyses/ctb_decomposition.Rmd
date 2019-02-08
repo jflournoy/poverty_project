@@ -1,8 +1,11 @@
 ---
 title: "CTB Modeling"
-author: "John Flournoy"
-date: "October 20, 2018"
-output: html_document
+author: "Rita Ludwig, John Flournoy"
+date: "`r Sys.time()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
 ---
 
 ```{r setup, include=FALSE}

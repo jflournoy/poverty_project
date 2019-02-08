@@ -1,8 +1,11 @@
 ---
 title: "SEM_Analyses_Poverty_JRP"
-author: "Rita M Ludwig"
-date: "10/29/2018"
-output: html_document
+author: "Rita M Ludwig, John Flournoy"
+date: "`r Sys.time()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
 ---
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -16,11 +19,12 @@ proj_dir <- '~/code_new/poverty_project/'
 ```{r data import, include=FALSE}
 scales_INR=read.csv(file.path(proj_dir, "JRPpaper/Data/dataforanalysis_JRP_poverty.csv"))
 ddparams=read.csv(file.path(proj_dir, "JRPpaper/Data/mctb_model_parameters.csv"))
-data=full_join(scales_INR,ddparams, by=c("subID"))
-missing=anti_join(scales_INR,ddparams, by=c("subID"))
+data=full_join(scales_INR,ddparams, by=c("subID" = "subject_id"))
+missing=anti_join(scales_INR,ddparams, by=c("subID" = "subject_id"))
 ```
 
-Measurement invariance. 
+# Measurement invariance
+
 >Specifically, 160 people were recruited for each annual income bracket of $0-$25,000 and $26,000-$50,00; 153 people were included for the $51,000-$75,000 bracket; and 150 people were included for each income bracket of $76,000-100,000, $101,000-$150,000, $151,000-$200,000, and greater than $201,000 annually. 
 
 >We will confirm that loadings are invariant across income categories, and perform all analyses using the latent personality variables. 
@@ -53,7 +57,7 @@ consci = '
  Consci =~ BFI3 + BFI33 + BFI8 + BFI28 + BFI13 + BFI38 + BFI18 + BFI23 + BFI43'
 ```
 
-Planfulness:
+## Planfulness:
 
 ```{r}
 
@@ -80,7 +84,7 @@ fitmeasures(bis_cfa_g_loadings, fit.measures = fms) -
 
 The MFI difference is very small.
 
-Conscientiousness:
+## Conscientiousness:
 
 ```{r}
 consci_cfa_g = cfa(consci, data = data, group = 'inc_group')
@@ -134,6 +138,8 @@ fitmeasures(consci_cfa_g_loadings_mod, fit.measures = fms) -
 
 Even better. For the hypothesis tests, we will have to check the difference when we use the modified versus unmodified model.
 
+# Hypothesis 1
+
 1.) The hypothesis about the relation of SES to the relative value of immediate gains will be tested with the significance test on the covariance between beta and INR. Delta, planfulness, Conscientiousness, and Impulsivity scale scores will be included in the model as covariates. We expect smaller beta values to be associated with lower INR.
 
 ```{r model 1}
@@ -151,7 +157,11 @@ hypo1 ='
 hypo1.fit = cfa(hypo1, data = data)  
 summary(hypo1.fit, fit.measures=TRUE, standardized=TRUE)
 semPaths(hypo1.fit, style="LISREL")
+```
 
+## Measurement invariance
+
+```{r}
 hypo1.cmod ='
   Planfulness =~ P_Q3RTP + P_Q1TP + P_Q7TP + P_Q11RTP + P_Q14TP + P_Q20RTP + P_Q23TP + P_QR25TP +  P_Q28TP +  P_Q30RTP + P_Q2RCS +  P_Q4RCS + P_Q5CS +  P_Q8CS +  P_Q12RCS +  P_Q15CS +	P_Q17CS +	P_Q18RCS + P_Q21RCS +	P_Q26CS + P_Q6RMF +  P_Q9MF +	P_Q10RMF +	P_Q13RMF +	P_Q16MF +	P_Q19MF +	P_Q22RMF +	P_Q24MF +	P_Q27MF +	P_Q29RMF
   BIS =~ BIS1 +	BIS2 +	BIS3 + BIS4 +	BIS5 +	BIS6 +	BIS7 +	BIS8 +	BIS9 +	BIS10 +	BIS11 +	BIS12 +	BIS13 +	BIS14 +	   BIS15 +	BIS16 +	BIS17 +	BIS18 +	BIS19 +	BIS20 +	BIS21 +	BIS22 +	BIS23 +	BIS24 +	BIS25 +	BIS26 +	BIS27 +	BIS28 +	      BIS29 +	BIS30
@@ -169,6 +179,9 @@ summary(hypo1.cmod.fit)
 semPaths(hypo1.cmod.fit, style="LISREL")
 
 ```
+
+# Hypothesis 2
+
 2.) The hypothesis about the relation of SES to the value of long-term gains will be tested with the significance test on the covariance between delta and INR. Planfulness, Conscientiousness, and Impulsivity scale scores will be included in the model as covariates. We expect smaller delta values to be associated with lower INR.
 
 ```{r model 2}
@@ -186,7 +199,11 @@ hypo2 ='
 hypo2.fit = cfa(hypo2, data = data)  
 summary(hypo2.fit, fit.measures=TRUE, standardized=TRUE)
 semPaths(hypo2.fit, style="LISREL")
+```
 
+## Measurement invariance
+
+```{r}
 hypo2.cmod ='
   Planfulness =~ P_Q3RTP + P_Q1TP + P_Q7TP + P_Q11RTP + P_Q14TP + P_Q20RTP + P_Q23TP + P_QR25TP +  P_Q28TP +  P_Q30RTP + P_Q2RCS +  P_Q4RCS + P_Q5CS +  P_Q8CS +  P_Q12RCS +  P_Q15CS +	P_Q17CS +	P_Q18RCS + P_Q21RCS +	P_Q26CS + P_Q6RMF +  P_Q9MF +	P_Q10RMF +	P_Q13RMF +	P_Q16MF +	P_Q19MF +	P_Q22RMF +	P_Q24MF +	P_Q27MF +	P_Q29RMF
   BIS =~ BIS1 +	BIS2 +	BIS3 + BIS4 +	BIS5 +	BIS6 +	BIS7 +	BIS8 +	BIS9 +	BIS10 +	BIS11 +	BIS12 +	BIS13 +	BIS14 +	   BIS15 +	BIS16 +	BIS17 +	BIS18 +	BIS19 +	BIS20 +	BIS21 +	BIS22 +	BIS23 +	BIS24 +	BIS25 +	BIS26 +	BIS27 +	BIS28 +	      BIS29 +	BIS30
@@ -202,6 +219,9 @@ hypo2.cmod.fit = cfa(hypo2.cmod, data = data)
 summary(hypo2.cmod.fit)
 semPaths(hypo2.cmod.fit, style="LISREL")
 ```
+
+# Hypothesis 3
+
 3.) The hypothesis about the relation of SES to personality traits will be tested by regressing INR on Planfulness, Conscientiousness, and Impulsivity in a single regression model. We expect higher Planfulness, and Conscientiousness, and lower Impulsivity, to be associated with higher INR. 
 
 ```{r model 3}
@@ -219,7 +239,11 @@ hypo3 ='
 hypo3.fit = cfa(hypo3, data = data)  
 summary(hypo3.fit, fit.measures=TRUE, standardized=TRUE)
 semPaths(hypo3.fit, style="LISREL")
+```
 
+## Measurement invariance
+
+```{r}
 hypo3.cmod ='
   Planfulness =~ P_Q3RTP + P_Q1TP + P_Q7TP + P_Q11RTP + P_Q14TP + P_Q20RTP + P_Q23TP + P_QR25TP +  P_Q28TP +  P_Q30RTP + P_Q2RCS +  P_Q4RCS + P_Q5CS +  P_Q8CS +  P_Q12RCS +  P_Q15CS +	P_Q17CS +	P_Q18RCS + P_Q21RCS +	P_Q26CS + P_Q6RMF +  P_Q9MF +	P_Q10RMF +	P_Q13RMF +	P_Q16MF +	P_Q19MF +	P_Q22RMF +	P_Q24MF +	P_Q27MF +	P_Q29RMF
   BIS =~ BIS1 +	BIS2 +	BIS3 + BIS4 +	BIS5 +	BIS6 +	BIS7 +	BIS8 +	BIS9 +	BIS10 +	BIS11 +	BIS12 +	BIS13 +	BIS14 +	   BIS15 +	BIS16 +	BIS17 +	BIS18 +	BIS19 +	BIS20 +	BIS21 +	BIS22 +	BIS23 +	BIS24 +	BIS25 +	BIS26 +	BIS27 +	BIS28 +	      BIS29 +	BIS30
@@ -236,7 +260,7 @@ summary(hypo3.cmod.fit)
 semPaths(hypo3.cmod.fit, style="LISREL")
 ```
 
-Examine simple covariance:
+# Examine simple covariance
 
 ```{r model exp1}
 exp1 ='
@@ -255,7 +279,11 @@ exp1 ='
 exp1.fit = cfa(exp1, data = data)  
 summary(exp1.fit, stand = T)
 semPaths(exp1.fit, style="LISREL")
+```
 
+## Measurement invariance
+
+```{r}
 exp1.cmod ='
   Planfulness =~ P_Q3RTP + P_Q1TP + P_Q7TP + P_Q11RTP + P_Q14TP + P_Q20RTP + P_Q23TP + P_QR25TP +  P_Q28TP +  P_Q30RTP + P_Q2RCS +  P_Q4RCS + P_Q5CS +  P_Q8CS +  P_Q12RCS +  P_Q15CS +	P_Q17CS +	P_Q18RCS + P_Q21RCS +	P_Q26CS + P_Q6RMF +  P_Q9MF +	P_Q10RMF +	P_Q13RMF +	P_Q16MF +	P_Q19MF +	P_Q22RMF +	P_Q24MF +	P_Q27MF +	P_Q29RMF
   BIS =~ BIS1 +	BIS2 +	BIS3 + BIS4 +	BIS5 +	BIS6 +	BIS7 +	BIS8 +	BIS9 +	BIS10 +	BIS11 +	BIS12 +	BIS13 +	BIS14 +	   BIS15 +	BIS16 +	BIS17 +	BIS18 +	BIS19 +	BIS20 +	BIS21 +	BIS22 +	BIS23 +	BIS24 +	BIS25 +	BIS26 +	BIS27 +	BIS28 +	      BIS29 +	BIS30
