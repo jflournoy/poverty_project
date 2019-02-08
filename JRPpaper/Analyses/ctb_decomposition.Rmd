@@ -422,42 +422,6 @@ for(i in unique((1:23 -1) %/% 6)){
 }
 ```
 
-```{r eval = FALSE}
-library(future)
-future::plan(future::sequential())
-mctb_brm_f <- future({
-  library(brms)
-
-  brms_formula <- as.formula(mctb_form_char)
-  
-  mctb_priors <- c(set_prior('normal(1, .3)', nlpar = 'a', lb = 0.1, ub = .9999),
-                   set_prior('normal(1, 1)', nlpar = 'b', lb = 0.1, ub = 1.2),
-                   set_prior('normal(1, 1)', nlpar = 'd', lb = 0.1, ub = 1.2),
-                   set_prior('student_t(3, 0, 2)', class = 'sd', nlpar = 'a', group = 'subject_id'),
-                   set_prior('student_t(3, 0, 2)', class = 'sd', nlpar = 'b', group = 'subject_id'),
-                   set_prior('student_t(3, 0, 2)', class = 'sd', nlpar = 'd', group = 'subject_id'))
-  
-  mctb_brm <- CachedFit({brm(bf(brms_formula, 
-                                a + b + d ~ 1 + (1 | subject_id),
-                                nl = TRUE),
-                             sample_prior = 'only',
-                             data = mctb_data,
-                             prior = mctb_priors,
-                             chains = 6, cores = 6,
-                             iter = 1600, warmup = 1000, 
-                             control = list(adapt_delta = .99, max_treedepth = 15),
-                             save_dso = T,  
-                             save_model = 'mctb_brm.stan',
-                             inits = 0)}, 
-                        rds_filename = file.path(data_dir_base, 
-                                                 'Analyses/brms_model_prior.RDS'))
-  mctb_brm
-})
-
-resolved(mctb_brm_f)
-```
-
-
 
 ## Plotting all the choices
 
