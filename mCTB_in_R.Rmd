@@ -180,7 +180,7 @@ choice_nlme_mod_noa=nlme(sooner_choice ~ ( endowment_later * (b^t0 * d^k * prati
 choice_nlme_mod=nlme(sooner_choice ~ ( endowment_later * (b^t0 * d^k * pratio)^(1/(a-1)) ) / ( 1+pratio * (b^t0 * d^k * pratio)^(1/(a-1)) ), 
               data = finaldata, 
               fixed = a + b + d ~ 1,
-              random = pdDiag(a + b + d ~ 1), # we don't model a as a RE because we care less about it
+              random = pdDiag(a + b + d ~ 1),
               groups = ~ subject_id,
               method = 'REML',
               start = c(a=a_start,b=b_start, d=d_start),

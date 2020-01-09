@@ -1,0 +1,83 @@
+---
+title: "Scale prep & INR calculation"
+author: "Rita M Ludwig"
+date: "9/10/2018"
+output: html_document
+---
+
+```{r housekeeping}
+library(tidyverse)
+library(plyr)
+```
+```{r data import}
+## Import data
+fulldata=read.csv("~/poverty_project/JRPpaper/Data/Poverty_JRP_scales_data.csv") %>%
+  mutate(subID=as.character(subID))
+
+## Select everything but the mCTB responses
+scales=fulldata[,-(2:27)]
+```
+IMPORTANT: Reads in the raw data and uses the 'scale_scoring' function to produce the scale scores. Does **NOT** save reverse-coding to the original dataset; all scores are in raw form.
+```{r scale score function}
+scale_scoring = function(name, abbrv, pos_items, neg_items) {
+  tempdata=subset(select(scales, subID, contains(abbrv)))
+  tempdata=na.omit(tempdata)
+  tempdata[neg_items]=((max(tempdata[-1]+1)-tempdata[neg_items]))
+  tempdata[paste(name, '_score', sep='')]=rowMeans(tempdata[-1])
+  if (exists("scoreddata")==1) {
+  scoreddata <<- full_join(scoreddata, tempdata, by = "subID") %>%
+    select(., -contains(".x"))
+} else {
+  scoreddata <<- full_join(scales, tempdata, by = "subID") %>%
+    select(., -contains(".x"))
+}
+}
+```
+```{r scaling scores}
+## Remember to add 1 to each item number because subID will be the first column.
+
+scale_scoring("BIS", "BIS", c(3,4,5,6,7,12,15,17,18,19,20,22,23,24,25,26,27,28,29), c(2,8,9,10,11,13,14,16,21,30,31))
+scale_scoring("BFI_C", "BFI", c(4,14,29,34,39), c(9,19,24,44))
+scale_scoring("Planfulness", "P_", c(2,6,8,9,10,15,16,17,18,20,24,25,27,28,29), c(3,4,5,7,11,12,13,14,19,21,22,23,26,30,31))
+
+## Save the scored scales file as its own thing.
+#write.csv(scoreddata, file = 'ScoredScales_JRP_poverty.csv')
+```
+```{r calculate INR}
+INRdata=fulldata %>%
+  subset(., select= c(subID,Age, SES1, SES2))
+INRdata$SES2=as.character(INRdata$SES2)
+
+### ADD A COLUMN WITH THE CORRECT POVERTY THRESHOLD BASED ON HOUSEHOLD SIZE(SES1) ###
+INRdata["threshold"] = NA
+INRdata$threshold[INRdata$SES1 == 1] = 12486
+INRdata$threshold[INRdata$SES1 == 1 & INRdata$Age >=65] = 11511
+INRdata$threshold[INRdata$SES1 == 2] = 16072
+INRdata$threshold[INRdata$SES1 == 2 & INRdata$Age >=65] = 14507
+INRdata$threshold[INRdata$SES1 == 3] = 18774
+INRdata$threshold[INRdata$SES1 == 4] = 24755
+INRdata$threshold[INRdata$SES1 == 5] = 29854
+INRdata$threshold[INRdata$SES1 == 6] = 34337
+INRdata$threshold[INRdata$SES1 == 7] = 39509
+INRdata$threshold[INRdata$SES1 == 8] = 44188
+INRdata$threshold[INRdata$SES1 >= 9] = 53155
+
+## Place everyone in the middle of their reported income bracket, then calculate INR.
+temp=str_extract_all(INRdata$SES2,"[:digit:]{2,3},*[:digit:]{3}", simplify="TRUE") 
+INRdata$minincome=as.numeric(str_replace(temp[,1],",",""))
+INRdata$maxincome=(as.numeric(str_replace(temp[,2],",","")))+1
+INRdata$adj_inc=((INRdata$maxincome-INRdata$minincome)/2)+INRdata$minincome
+INRdata$adj_inc[INRdata$minincome == 10000]= 5000
+INRdata$adj_inc[INRdata$SES2 == "More than $1,000,000"]=1000000
+INRdata["INR"] = (INRdata$adj_inc/INRdata$threshold) 
+INRdata=na.omit(INRdata)
+sum(INRdata$INR<=1)
+
+## Save INR file as its own thing.
+#write.csv(INRdata, file = 'INRdata_JRP_poverty.csv')
+```
+Save together a data file with INR and the reverse-keyed items.
+```{r write file}
+data=full_join(scoreddata,INRdata,by="subID")
+write.csv(data, file = 'dataforanalysis_JRP_poverty.csv')
+```
